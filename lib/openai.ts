@@ -111,7 +111,7 @@ const SYSTEM_PROMPT = `# Role: 任务提取与结构化助手
  * @returns 提取的任务列表
  */
 export async function extractTasksFromText(text: string): Promise<ExtractedTask[]> {
-  const client = getOpenAIClient();
+  const client = await getOpenAIClient();
 
   // 获取当前日期作为相对时间的参考
   const currentDate = new Date().toISOString().split('T')[0];
