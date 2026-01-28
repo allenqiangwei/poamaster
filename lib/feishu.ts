@@ -64,3 +64,45 @@ export async function sendFeishuMessage(
     throw new Error(`发送飞书消息失败: ${data.msg}`);
   }
 }
+
+/**
+ * 发送文本消息到飞书群聊
+ */
+export async function sendFeishuTextMessage(text: string): Promise<void> {
+  const chatId = await getConfig('feishu.chatId');
+
+  if (!chatId) {
+    throw new Error('飞书群聊 ID 未配置');
+  }
+
+  const accessToken = await getFeishuAccessToken();
+
+  const res = await fetch(
+    'https://open.feishu.cn/open-api/im/v1/messages?receive_id_type=chat_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        receive_id: chatId,
+        msg_type: 'text',
+        content: JSON.stringify({
+          text: text
+        })
+      })
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`发送飞书消息失败: HTTP ${res.status} - ${errorText}`);
+  }
+
+  const data = await res.json();
+
+  if (data.code !== 0) {
+    throw new Error(`发送飞书消息失败: ${data.msg || JSON.stringify(data)}`);
+  }
+}

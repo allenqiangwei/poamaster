@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
-import { sendFeishuMessage } from '@/lib/feishu';
+import { sendFeishuTextMessage } from '@/lib/feishu';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const message = formatTasksForFeishu(tasks);
 
     // 发送到飞书
-    await sendFeishuMessage(message);
+    await sendFeishuTextMessage(message);
 
     return NextResponse.json({
       success: true,
