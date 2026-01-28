@@ -18,9 +18,12 @@ import {
   Stack,
   Checkbox,
   ListItemText,
-  OutlinedInput
+  OutlinedInput,
+  Alert,
+  Snackbar,
+  CircularProgress
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { Add as AddIcon, Send as SendIcon } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
 import TaskTable from '@/components/TaskTable';
 
@@ -50,6 +53,12 @@ export default function TodoPage() {
   const [currentTab, setCurrentTab] = useState<TaskStatus | 'ALL'>('ALL');
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('dueDate-asc');
+  const [sending, setSending] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'success' });
 
   // 加载负责人列表
   useEffect(() => {
@@ -131,6 +140,53 @@ export default function TodoPage() {
     await handleStatusChange(id, 'DONE');
   };
 
+  const handleSendToFeishu = async () => {
+    if (sortedTasks.length === 0) {
+      setSnackbar({
+        open: true,
+        message: '没有可发送的任务',
+        severity: 'error',
+      });
+      return;
+    }
+
+    if (!confirm(`确定要发送 ${sortedTasks.length} 个任务到飞书吗？`)) {
+      return;
+    }
+
+    setSending(true);
+    try {
+      const taskIds = sortedTasks.map((task) => task.id);
+
+      const res = await fetch('/api/tasks/send-to-feishu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSnackbar({
+          open: true,
+          message: data.message || '发送成功',
+          severity: 'success',
+        });
+      } else {
+        throw new Error(data.error || '发送失败');
+      }
+    } catch (error) {
+      console.error('发送任务到飞书失败:', error);
+      setSnackbar({
+        open: true,
+        message: error instanceof Error ? error.message : '发送失败，请检查飞书配置',
+        severity: 'error',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
   // 客户端排序
   const sortedTasks = [...tasks].sort((a, b) => {
     switch (sortBy) {
@@ -162,13 +218,23 @@ export default function TodoPage() {
         }}
       >
         <Typography variant="h4">📋 To-Do List</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => router.push('/todo/new')}
-        >
-          添加任务
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button
+            variant="outlined"
+            startIcon={sending ? <CircularProgress size={20} /> : <SendIcon />}
+            onClick={handleSendToFeishu}
+            disabled={sending || sortedTasks.length === 0}
+          >
+            发送到飞书
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => router.push('/todo/new')}
+          >
+            添加任务
+          </Button>
+        </Stack>
       </Box>
 
       <Tabs
@@ -248,6 +314,19 @@ export default function TodoPage() {
           />
         </>
       )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }
