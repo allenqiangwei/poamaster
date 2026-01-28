@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth';
 import { extractTasksFromText, getOpenAIClient } from '@/lib/openai';
-import pdf from 'pdf-parse';
 
 /**
  * POST /api/tasks/extract-from-file
@@ -45,6 +44,9 @@ export async function POST(request: NextRequest) {
       // 处理 PDF 文件
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
+
+      // 动态导入 pdf-parse
+      const pdf = (await import('pdf-parse')).default;
       const pdfData = await pdf(buffer);
       extractedText = pdfData.text;
 
