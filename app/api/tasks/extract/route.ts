@@ -56,18 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 检查 OpenAI API Key 是否配置
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        {
-          error: 'OpenAI API Key 未配置',
-          details: '请在环境变量中设置 OPENAI_API_KEY',
-        },
-        { status: 500 }
-      );
-    }
-
-    // 调用 OpenAI 提取任务
+    // 调用 OpenAI 提取任务（会自动从数据库或环境变量读取 API Key）
     const tasks = await extractTasksFromText(text);
 
     // 返回提取的任务
@@ -80,14 +69,14 @@ export async function POST(request: NextRequest) {
 
     // 处理特定错误类型
     if (error instanceof Error) {
-      // OpenAI API 错误
-      if (error.message.includes('API key')) {
+      // OpenAI API Key 错误
+      if (error.message.includes('API key') || error.message.includes('401') || error.message.includes('Incorrect API key')) {
         return NextResponse.json(
           {
-            error: 'OpenAI API Key 无效',
-            details: '请检查环境变量中的 OPENAI_API_KEY 是否正确',
+            error: 'OpenAI API Key 无效或未配置',
+            details: '请在设置页面检查您的 OpenAI API Key 是否正确。访问 https://platform.openai.com/api-keys 获取有效的 API Key',
           },
-          { status: 500 }
+          { status: 401 }
         );
       }
 

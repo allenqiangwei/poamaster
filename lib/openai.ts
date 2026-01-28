@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getConfig } from './config';
 
 // 提取的任务接口
 export interface ExtractedTask {
@@ -8,21 +9,24 @@ export interface ExtractedTask {
   dod: string | null; // Definition of Done
 }
 
-// OpenAI 客户端缓存
-let openaiClient: OpenAI | null = null;
-
 /**
- * 获取 OpenAI 客户端（单例模式）
+ * 获取 OpenAI 客户端（异步）
+ * 优先从数据库配置读取 API Key，如果没有则使用环境变量
  */
-export function getOpenAIClient(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY 环境变量未配置');
-    }
-    openaiClient = new OpenAI({ apiKey });
+export async function getOpenAIClient(): Promise<OpenAI> {
+  // 优先从数据库读取配置
+  let apiKey = await getConfig('openai.apiKey');
+
+  // 如果数据库没有，尝试从环境变量读取
+  if (!apiKey) {
+    apiKey = process.env.OPENAI_API_KEY || null;
   }
-  return openaiClient;
+
+  if (!apiKey) {
+    throw new Error('OpenAI API Key 未配置。请在设置页面配置或设置 OPENAI_API_KEY 环境变量');
+  }
+
+  return new OpenAI({ apiKey });
 }
 
 /**
