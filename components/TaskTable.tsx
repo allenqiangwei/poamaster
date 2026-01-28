@@ -13,7 +13,8 @@ import {
   Box,
   Typography,
   Select,
-  MenuItem
+  MenuItem,
+  Chip
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -45,19 +46,63 @@ export default function TaskTable({
   onStatusChange,
   onMarkDone
 }: TaskTableProps) {
-  const getRowColor = (dueDate: string | null) => {
-    if (!dueDate) return 'transparent';
+  const isOverdue = (dueDate: string | null, status: TaskStatus) => {
+    if (!dueDate || status === 'DONE' || status === 'CANCELLED') {
+      return false;
+    }
 
     const date = new Date(dueDate);
     const today = new Date();
-    const sevenDaysLater = addDays(today, 7);
+    today.setHours(0, 0, 0, 0);
+    const taskDate = new Date(date);
+    taskDate.setHours(0, 0, 0, 0);
 
-    if (isToday(date)) {
-      return '#ffebee'; // 红色背景
+    return taskDate < today;
+  };
+
+  /**
+   * Get row background color based on due date
+   * Visual hierarchy:
+   * - Overdue (past due): Dark red (#ffcdd2) + "逾期" chip
+   * - Due today: Light red (#ffebee)
+   * - Due within 2 days: Orange (#ffe0b2)
+   * - Due within 7 days: Yellow (#fff9c4)
+   * - Other tasks: Transparent
+   */
+  const getRowColor = (dueDate: string | null, status: TaskStatus) => {
+    if (!dueDate) return 'transparent';
+
+    // Don't highlight completed or cancelled tasks
+    if (status === 'DONE' || status === 'CANCELLED') {
+      return 'transparent';
     }
 
-    if (isWithinInterval(date, { start: today, end: sevenDaysLater })) {
-      return '#fff9c4'; // 黄色背景
+    const date = new Date(dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+    const taskDate = new Date(date);
+    taskDate.setHours(0, 0, 0, 0);
+
+    // Overdue tasks (past due date) - darker red
+    if (taskDate < today) {
+      return '#ffcdd2'; // Stronger red for overdue
+    }
+
+    // Due today - light red
+    if (isToday(date)) {
+      return '#ffebee';
+    }
+
+    // Due within 2 days (tomorrow or day after) - orange
+    const twoDaysLater = addDays(today, 2);
+    if (isWithinInterval(date, { start: addDays(today, 1), end: twoDaysLater })) {
+      return '#ffe0b2'; // Orange background
+    }
+
+    // Due within 7 days (3-7 days) - yellow
+    const sevenDaysLater = addDays(today, 7);
+    if (isWithinInterval(date, { start: addDays(today, 3), end: sevenDaysLater })) {
+      return '#fff9c4'; // Yellow background
     }
 
     return 'transparent';
@@ -95,14 +140,26 @@ export default function TaskTable({
           {tasks.map((task) => (
             <TableRow
               key={task.id}
-              sx={{ bgcolor: getRowColor(task.dueDate) }}
+              sx={{ bgcolor: getRowColor(task.dueDate, task.status) }}
             >
               <TableCell>{task.title}</TableCell>
               <TableCell>{task.assignee?.name || '-'}</TableCell>
               <TableCell>
-                {task.dueDate
-                  ? format(new Date(task.dueDate), 'yyyy-MM-dd HH:mm')
-                  : '-'}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <span>
+                    {task.dueDate
+                      ? format(new Date(task.dueDate), 'yyyy-MM-dd HH:mm')
+                      : '-'}
+                  </span>
+                  {isOverdue(task.dueDate, task.status) && (
+                    <Chip
+                      label="逾期"
+                      color="error"
+                      size="small"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  )}
+                </Box>
               </TableCell>
               <TableCell>
                 <Select

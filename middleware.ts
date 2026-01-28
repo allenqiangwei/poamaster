@@ -40,12 +40,19 @@ export async function middleware(request: NextRequest) {
   // 从 Cookie 中获取 Session token
   const token = request.cookies.get('session')?.value;
 
+  // Debug logging
+  const allCookies = request.cookies.getAll();
+  console.log(`[Middleware] ${pathname} - Cookies received: ${allCookies.map(c => c.name).join(', ') || 'none'}`);
+
   if (!token) {
     // 未登录，重定向到登录页
+    console.log(`[Middleware] No session token for ${pathname}, redirecting to login`);
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }
+
+  console.log(`[Middleware] Session token found for ${pathname}`);
 
   try {
     // 验证 Session

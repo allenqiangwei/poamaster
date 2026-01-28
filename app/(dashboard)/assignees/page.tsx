@@ -70,7 +70,7 @@ export default function AssigneesPage() {
   const loadAssignees = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/assignees?includeTaskCount=true');
+      const res = await fetch('/api/assignees?includeTaskCount=true', { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setAssignees(data.data);
@@ -163,7 +163,8 @@ export default function AssigneesPage() {
 
     try {
       const res = await fetch(`/api/assignees/${assigneeId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: "include"
       });
 
       const data = await res.json();

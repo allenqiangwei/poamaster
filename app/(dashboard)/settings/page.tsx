@@ -36,7 +36,7 @@ export default function SettingsPage() {
 
   const loadConfigs = async () => {
     try {
-      const res = await fetch('/api/config');
+      const res = await fetch('/api/config', { credentials: 'include' });
       const data = await res.json();
       setConfigs({ ...configs, ...data });
     } catch {
@@ -52,6 +52,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
+        credentials: "include",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(configs)
       });

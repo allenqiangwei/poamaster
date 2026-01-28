@@ -28,7 +28,7 @@ export default function LoginPage() {
   useEffect(() => {
     const checkInit = async () => {
       try {
-        const res = await fetch('/api/auth/check-init');
+        const res = await fetch('/api/auth/check-init', { credentials: 'include' });
         const data = await res.json();
 
         if (!data.initialized) {
@@ -59,6 +59,7 @@ export default function LoginPage() {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: "include",
         headers: {
           'Content-Type': 'application/json',
         },

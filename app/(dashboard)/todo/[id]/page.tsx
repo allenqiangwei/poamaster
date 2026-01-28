@@ -74,7 +74,7 @@ export default function EditTaskPage({ params }: TaskPageProps) {
 
   const loadTask = async () => {
     try {
-      const res = await fetch(`/api/tasks/${taskId}`);
+      const res = await fetch(`/api/tasks/${taskId}`, { credentials: 'include' });
       const data = await res.json();
 
       if (res.ok && data.success) {
@@ -100,7 +100,7 @@ export default function EditTaskPage({ params }: TaskPageProps) {
 
   const loadAssignees = async () => {
     try {
-      const res = await fetch('/api/assignees');
+      const res = await fetch('/api/assignees', { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setAssignees(data.data);
@@ -154,6 +154,7 @@ export default function EditTaskPage({ params }: TaskPageProps) {
       // 创建新负责人
       const createRes = await fetch('/api/assignees', {
         method: 'POST',
+        credentials: "include",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newAssigneeName })
       });
@@ -181,6 +182,7 @@ export default function EditTaskPage({ params }: TaskPageProps) {
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
+        credentials: "include",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: formData.title.trim(),
@@ -214,7 +216,8 @@ export default function EditTaskPage({ params }: TaskPageProps) {
 
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: "include"
       });
 
       if (res.ok) {

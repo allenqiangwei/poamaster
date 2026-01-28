@@ -59,13 +59,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Configure cookie for IP-based access (local network)
+    // When accessing via IP address (e.g., 192.168.x.x), don't set explicit domain
     response.cookies.set('session', session.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Must be false for HTTP (IP addresses typically use HTTP)
       sameSite: 'lax',
       maxAge: 30 * 24 * 60 * 60, // 30 天
       path: '/',
+      // No explicit domain - allows cookie to work with IP addresses
     });
+
+    console.log(`[Login] Set session cookie for user: ${user.username}, token length: ${session.token.length}`);
 
     return response;
   } catch (error) {

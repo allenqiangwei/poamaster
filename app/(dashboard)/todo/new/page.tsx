@@ -125,7 +125,8 @@ export default function NewTaskPage() {
         res = await fetch('/api/tasks/extract', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({ text }),
+          credentials: 'include'
         });
       } else {
         const formData = new FormData();
@@ -133,7 +134,8 @@ export default function NewTaskPage() {
 
         res = await fetch('/api/tasks/extract-from-file', {
           method: 'POST',
-          body: formData
+          body: formData,
+          credentials: 'include'
         });
       }
 
@@ -167,7 +169,9 @@ export default function NewTaskPage() {
         // 如果有负责人，先查找或创建负责人记录
         if (task.assignee && task.assignee.trim().length > 0) {
           // 查找负责人
-          const assigneesRes = await fetch('/api/assignees');
+          const assigneesRes = await fetch('/api/assignees', {
+            credentials: 'include'
+          });
           const assigneesData = await assigneesRes.json();
 
           if (assigneesRes.ok && assigneesData.success) {
@@ -182,7 +186,8 @@ export default function NewTaskPage() {
               const createAssigneeRes = await fetch('/api/assignees', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: task.assignee })
+                body: JSON.stringify({ name: task.assignee }),
+                credentials: 'include'
               });
 
               const createAssigneeData = await createAssigneeRes.json();
@@ -203,7 +208,8 @@ export default function NewTaskPage() {
             dueDate: task.dueDate,
             status: 'TODO',
             assigneeId
-          })
+          }),
+          credentials: 'include'
         });
 
         if (!res.ok) {

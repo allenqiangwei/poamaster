@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getConfig } from './config';
+import { ProxyAgent } from 'undici';
 
 // 提取的任务接口
 export interface ExtractedTask {
@@ -26,7 +27,24 @@ export async function getOpenAIClient(): Promise<OpenAI> {
     throw new Error('OpenAI API Key 未配置。请在设置页面配置或设置 OPENAI_API_KEY 环境变量');
   }
 
-  return new OpenAI({ apiKey });
+  // 检测并配置代理 (使用 undici.ProxyAgent for fetch API)
+  const proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY;
+
+  const clientConfig: any = {
+    apiKey,
+    timeout: 60 * 1000, // 60 seconds timeout
+    maxRetries: 2, // Retry failed requests twice
+  };
+
+  // 如果配置了代理，使用 fetchOptions 配置 undici.ProxyAgent
+  if (proxyUrl) {
+    const proxyAgent = new ProxyAgent(proxyUrl);
+    clientConfig.fetchOptions = {
+      dispatcher: proxyAgent,
+    };
+  }
+
+  return new OpenAI(clientConfig);
 }
 
 /**
@@ -166,7 +184,23 @@ ${text}`;
       dod: task.dod || null,
     }));
   } catch (error) {
+    // Handle specific OpenAI errors
     if (error instanceof Error) {
+      // Timeout errors
+      if (error.message.includes('timeout') || error.message.includes('timed out')) {
+        throw new Error('请求超时。请检查网络连接或稍后再试');
+      }
+
+      // API key errors
+      if (error.message.includes('Incorrect API key') || error.message.includes('Invalid API key')) {
+        throw new Error('OpenAI API Key 无效。请在设置页面检查您的 API Key');
+      }
+
+      // Rate limit errors
+      if (error.message.includes('rate_limit') || error.message.includes('quota')) {
+        throw new Error('API 请求频率超限或配额不足。请稍后再试');
+      }
+
       throw new Error(`任务提取失败: ${error.message}`);
     }
     throw new Error('任务提取失败: 未知错误');

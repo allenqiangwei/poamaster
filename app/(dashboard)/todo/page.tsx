@@ -73,7 +73,7 @@ export default function TodoPage() {
   useEffect(() => {
     const loadAssignees = async () => {
       try {
-        const res = await fetch('/api/assignees');
+        const res = await fetch('/api/assignees', { credentials: 'include' });
         const data = await res.json();
         if (data.success) {
           setAssignees(data.data);
@@ -96,7 +96,7 @@ export default function TodoPage() {
         params.set('assigneeIds', selectedAssignees.join(','));
       }
 
-      const res = await fetch(`/api/tasks?${params}`);
+      const res = await fetch(`/api/tasks?${params}`, { credentials: 'include' });
       if (!res.ok) throw new Error(await res.text());
 
       const data = await res.json();
@@ -121,6 +121,7 @@ export default function TodoPage() {
     try {
       const res = await fetch(`/api/tasks/${id}`, {
         method: 'PATCH',
+        credentials: "include",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
@@ -186,6 +187,7 @@ export default function TodoPage() {
 
       const res = await fetch('/api/tasks/send-to-feishu', {
         method: 'POST',
+        credentials: "include",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskIds }),
       });

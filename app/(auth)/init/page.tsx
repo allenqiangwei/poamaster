@@ -49,6 +49,7 @@ export default function InitPage() {
     try {
       const res = await fetch('/api/auth/init', {
         method: 'POST',
+        credentials: "include",
         headers: {
           'Content-Type': 'application/json',
         },
