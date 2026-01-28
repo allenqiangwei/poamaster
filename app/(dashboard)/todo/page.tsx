@@ -15,7 +15,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Stack
+  Stack,
+  Checkbox,
+  ListItemText,
+  OutlinedInput
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
@@ -45,7 +48,7 @@ export default function TodoPage() {
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState<TaskStatus | 'ALL'>('ALL');
-  const [selectedAssignee, setSelectedAssignee] = useState<string>('ALL');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('dueDate-asc');
 
   // 加载负责人列表
@@ -71,8 +74,8 @@ export default function TodoPage() {
       if (currentTab !== 'ALL') {
         params.set('status', currentTab);
       }
-      if (selectedAssignee !== 'ALL') {
-        params.set('assigneeId', selectedAssignee);
+      if (selectedAssignees.length > 0) {
+        params.set('assigneeIds', selectedAssignees.join(','));
       }
 
       const res = await fetch(`/api/tasks?${params}`);
@@ -90,7 +93,7 @@ export default function TodoPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentTab, selectedAssignee]);
+  }, [currentTab, selectedAssignees]);
 
   useEffect(() => {
     loadTasks();
@@ -184,17 +187,31 @@ export default function TodoPage() {
       </Tabs>
 
       <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-        <FormControl sx={{ minWidth: 200 }}>
+        <FormControl sx={{ minWidth: 250 }}>
           <InputLabel>负责人</InputLabel>
           <Select
-            value={selectedAssignee}
+            multiple
+            value={selectedAssignees}
             label="负责人"
-            onChange={(e) => setSelectedAssignee(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedAssignees(typeof value === 'string' ? value.split(',') : value);
+            }}
+            input={<OutlinedInput label="负责人" />}
+            renderValue={(selected) => {
+              if (selected.length === 0) {
+                return '全部';
+              }
+              return selected
+                .map((id) => assignees.find((a) => a.id === id)?.name)
+                .filter(Boolean)
+                .join(', ');
+            }}
           >
-            <MenuItem value="ALL">全部</MenuItem>
             {assignees.map((assignee) => (
               <MenuItem key={assignee.id} value={assignee.id}>
-                {assignee.name}
+                <Checkbox checked={selectedAssignees.indexOf(assignee.id) > -1} />
+                <ListItemText primary={assignee.name} />
               </MenuItem>
             ))}
           </Select>

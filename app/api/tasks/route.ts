@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // 解析查询参数
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as TaskStatus | null;
-    const assigneeId = searchParams.get('assigneeId');
+    const assigneeIds = searchParams.get('assigneeIds'); // 支持逗号分隔的多个 ID
     const dueBefore = searchParams.get('dueBefore');
     const dueAfter = searchParams.get('dueAfter');
 
@@ -51,8 +51,12 @@ export async function GET(request: NextRequest) {
       where.status = status;
     }
 
-    if (assigneeId) {
-      where.assigneeId = assigneeId;
+    if (assigneeIds) {
+      // 支持多个负责人筛选（逗号分隔）
+      const ids = assigneeIds.split(',').filter(id => id.trim());
+      if (ids.length > 0) {
+        where.assigneeId = { in: ids };
+      }
     }
 
     if (dueBefore || dueAfter) {
