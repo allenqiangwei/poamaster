@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Container,
@@ -28,11 +28,7 @@ export default function TodoPage() {
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState<TaskStatus | 'ALL'>('ALL');
 
-  useEffect(() => {
-    loadTasks();
-  }, [currentTab]);
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -41,22 +37,35 @@ export default function TodoPage() {
       }
 
       const res = await fetch(`/api/tasks?${params}`);
+      if (!res.ok) throw new Error(await res.text());
+
       const data = await res.json();
-      setTasks(data);
+      if (data.success) {
+        setTasks(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to load tasks');
+      }
     } catch (error) {
       console.error('加载任务失败:', error);
+      setTasks([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentTab]);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
 
   const handleStatusChange = async (id: string, status: TaskStatus) => {
     try {
-      await fetch(`/api/tasks/${id}`, {
+      const res = await fetch(`/api/tasks/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
+      if (!res.ok) throw new Error(await res.text());
+
       loadTasks();
     } catch (error) {
       console.error('更新状态失败:', error);
@@ -67,7 +76,9 @@ export default function TodoPage() {
     if (!confirm('确定要删除这个任务吗？')) return;
 
     try {
-      await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
+
       loadTasks();
     } catch (error) {
       console.error('删除任务失败:', error);

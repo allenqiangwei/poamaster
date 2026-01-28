@@ -21,7 +21,6 @@ import {
   CheckCircle as DoneIcon
 } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
-import TaskStatusChip from './TaskStatusChip';
 
 interface Task {
   id: string;
