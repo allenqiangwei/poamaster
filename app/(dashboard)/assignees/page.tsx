@@ -20,6 +20,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   TextField,
   Alert,
@@ -56,6 +57,11 @@ export default function AssigneesPage() {
     message: string;
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    assigneeId: string | null;
+    assigneeName: string;
+  }>({ open: false, assigneeId: null, assigneeName: '' });
 
   useEffect(() => {
     loadAssignees();
@@ -145,13 +151,18 @@ export default function AssigneesPage() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`确定要删除负责人"${name}"吗？\n注意：删除后该负责人的任务将变为未分配状态。`)) {
-      return;
-    }
+  const handleDelete = (id: string, name: string) => {
+    setDeleteDialog({ open: true, assigneeId: id, assigneeName: name });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { assigneeId } = deleteDialog;
+    setDeleteDialog({ open: false, assigneeId: null, assigneeName: '' });
+
+    if (!assigneeId) return;
 
     try {
-      const res = await fetch(`/api/assignees/${id}`, {
+      const res = await fetch(`/api/assignees/${assigneeId}`, {
         method: 'DELETE'
       });
 
@@ -282,6 +293,29 @@ export default function AssigneesPage() {
           <Button onClick={handleCloseDialog}>取消</Button>
           <Button onClick={handleSave} variant="contained">
             保存
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, assigneeId: null, assigneeName: '' })}
+      >
+        <DialogTitle>确认删除</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除负责人 <strong>"{deleteDialog.assigneeName}"</strong> 吗？
+            <br />
+            <br />
+            注意：删除后该负责人的任务将变为未分配状态。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog({ open: false, assigneeId: null, assigneeName: '' })}>
+            取消
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" autoFocus>
+            删除
           </Button>
         </DialogActions>
       </Dialog>
