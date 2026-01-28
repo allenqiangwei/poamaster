@@ -65,6 +65,38 @@ export default function NewTaskPage() {
     try {
       // 批量创建任务
       for (const task of extractedTasks) {
+        let assigneeId: string | undefined = undefined;
+
+        // 如果有负责人，先查找或创建负责人记录
+        if (task.assignee && task.assignee.trim().length > 0) {
+          // 查找负责人
+          const assigneesRes = await fetch('/api/assignees');
+          const assigneesData = await assigneesRes.json();
+
+          if (assigneesRes.ok && assigneesData.success) {
+            const existingAssignee = assigneesData.data.find(
+              (a: any) => a.name === task.assignee
+            );
+
+            if (existingAssignee) {
+              assigneeId = existingAssignee.id;
+            } else {
+              // 负责人不存在，创建新的负责人
+              const createAssigneeRes = await fetch('/api/assignees', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: task.assignee })
+              });
+
+              const createAssigneeData = await createAssigneeRes.json();
+              if (createAssigneeRes.ok && createAssigneeData.success) {
+                assigneeId = createAssigneeData.data.id;
+              }
+            }
+          }
+        }
+
+        // 创建任务
         const res = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -72,7 +104,8 @@ export default function NewTaskPage() {
             title: task.title,
             dod: task.dod,
             dueDate: task.dueDate,
-            status: 'TODO'
+            status: 'TODO',
+            assigneeId
           })
         });
 
