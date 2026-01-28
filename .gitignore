@@ -1,35 +1,57 @@
-# Worktrees
-.worktrees/
 
-# Dependencies
-node_modules/
-
-# Environment variables
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+.DS_Store
 .env
 .env.local
-
-# Next.js
-.next/
-out/
-build/
-
-# Prisma
-prisma/migrations/
-
-# IDE
-.vscode/
+.env*
+!.env.example
 .idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
+.next/
+.nyc_output/
+.pnp.*
+.pnpm-debug.log*
+.vercel
+.vscode/
+.worktrees/
+.yarn/*
 *.log
+*.pem
+*.tsbuildinfo
+/.next/
+/.pnp
+/build
+/coverage
+/node_modules
+/out/
+# debug
+# dependencies
+# Dependencies
+# env files (can opt-in for committing if needed)
+# Environment variables
+# IDE
+# Logs
+# misc
+# next.js
+# Next.js
+# OS
+# Prisma
+# production
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# testing
+# Testing
+# typescript
+# vercel
+# Worktrees
+build/
+coverage/
+next-env.d.ts
+node_modules/
 npm-debug.log*
+out/
+prisma/migrations/
+Thumbs.db
 yarn-debug.log*
 yarn-error.log*
-
-# Testing
-coverage/
-.nyc_output/
