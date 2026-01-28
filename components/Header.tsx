@@ -12,7 +12,8 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   Home as HomeIcon,
-  List as ListIcon
+  List as ListIcon,
+  People as PeopleIcon
 } from '@mui/icons-material';
 
 export default function Header() {
@@ -68,6 +69,16 @@ export default function Header() {
             }}
           >
             任务列表
+          </Button>
+          <Button
+            color="inherit"
+            startIcon={<PeopleIcon />}
+            onClick={() => router.push('/assignees')}
+            sx={{
+              bgcolor: pathname?.startsWith('/assignees') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
+          >
+            负责人
           </Button>
         </Box>
 
