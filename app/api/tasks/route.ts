@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
 import { TaskStatus } from '@prisma/client';
+import { startScheduler } from '@/services/scheduler';
+
+// 启动定时任务（仅在生产环境）
+if (process.env.NODE_ENV === 'production') {
+  startScheduler();
+}
 
 /**
  * GET /api/tasks
