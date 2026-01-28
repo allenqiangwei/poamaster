@@ -48,6 +48,7 @@ export default function EditTaskPage({ params }: TaskPageProps) {
     open: boolean;
     assigneeName: string;
   }>({ open: false, assigneeName: '' });
+  const [deleteDialog, setDeleteDialog] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     dod: '',
@@ -204,8 +205,12 @@ export default function EditTaskPage({ params }: TaskPageProps) {
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm('确定要删除这个任务吗？')) return;
+  const handleDelete = () => {
+    setDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleteDialog(false);
 
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
@@ -360,6 +365,26 @@ export default function EditTaskPage({ params }: TaskPageProps) {
           </Button>
           <Button onClick={handleConfirmCreateAssignee} variant="contained" autoFocus>
             创建并保存
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteDialog}
+        onClose={() => setDeleteDialog(false)}
+      >
+        <DialogTitle>确认删除</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除这个任务吗？删除后无法恢复。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(false)}>
+            取消
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" autoFocus>
+            删除
           </Button>
         </DialogActions>
       </Dialog>
