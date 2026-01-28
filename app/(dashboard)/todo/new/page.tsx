@@ -13,9 +13,11 @@ import {
   Box,
   Alert,
   CircularProgress,
-  IconButton
+  IconButton,
+  Tabs,
+  Tab
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Upload as UploadIcon } from '@mui/icons-material';
 import { ExtractedTask } from '@/lib/openai';
 import TaskPreviewTable from '@/components/TaskPreviewTable';
 
@@ -25,10 +27,30 @@ export default function NewTaskPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
+  const [inputMode, setInputMode] = useState<'text' | 'file'>('text');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setError('只支持 PDF、JPG、PNG 和 WEBP 格式');
+        return;
+      }
+      setSelectedFile(file);
+      setError('');
+    }
+  };
 
   const handleExtract = async () => {
-    if (!text.trim()) {
+    if (inputMode === 'text' && !text.trim()) {
       setError('请输入要提取的文本内容');
+      return;
+    }
+
+    if (inputMode === 'file' && !selectedFile) {
+      setError('请选择要上传的文件');
       return;
     }
 
@@ -36,11 +58,23 @@ export default function NewTaskPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/tasks/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      let res;
+
+      if (inputMode === 'text') {
+        res = await fetch('/api/tasks/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('file', selectedFile!);
+
+        res = await fetch('/api/tasks/extract-from-file', {
+          method: 'POST',
+          body: formData
+        });
+      }
 
       const data = await res.json();
 
@@ -141,28 +175,79 @@ export default function NewTaskPage() {
 
       {extractedTasks.length === 0 ? (
         <Paper sx={{ p: 3, mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            粘贴文本内容
-          </Typography>
-          <Typography variant="body2" color="text.secondary" mb={2}>
-            支持从会议记录、邮件、备忘录等文本中提取任务
-          </Typography>
+          <Tabs value={inputMode} onChange={(_, value) => setInputMode(value)} sx={{ mb: 3 }}>
+            <Tab label="文本输入" value="text" />
+            <Tab label="文件上传" value="file" />
+          </Tabs>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-          <TextField
-            multiline
-            rows={10}
-            fullWidth
-            placeholder="例如：
+          {inputMode === 'text' ? (
+            <>
+              <Typography variant="h6" gutterBottom>
+                粘贴文本内容
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                支持从会议记录、邮件、备忘录等文本中提取任务
+              </Typography>
+
+              <TextField
+                multiline
+                rows={10}
+                fullWidth
+                placeholder="例如：
 明天下午3点前，张三需要完成用户认证模块的开发，要求代码通过测试并部署。
 李四负责提交项目周报，截止今天下午5点。
 王五本周内完成数据库设计文档。"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </>
+          ) : (
+            <>
+              <Typography variant="h6" gutterBottom>
+                上传文件
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                支持 PDF、JPG、PNG、WEBP 格式
+              </Typography>
 
-          <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+              <Box
+                sx={{
+                  border: '2px dashed',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 4,
+                  textAlign: 'center',
+                  bgcolor: 'grey.50'
+                }}
+              >
+                <input
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  style={{ display: 'none' }}
+                  id="file-upload"
+                  type="file"
+                  onChange={handleFileChange}
+                />
+                <label htmlFor="file-upload">
+                  <Button
+                    variant="outlined"
+                    component="span"
+                    startIcon={<UploadIcon />}
+                  >
+                    选择文件
+                  </Button>
+                </label>
+                {selectedFile && (
+                  <Typography variant="body2" sx={{ mt: 2 }}>
+                    已选择: {selectedFile.name}
+                  </Typography>
+                )}
+              </Box>
+            </>
+          )}
+
+          <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
             <Button
               variant="contained"
               onClick={handleExtract}
