@@ -12,7 +12,7 @@ export async function getFeishuAccessToken(): Promise<string> {
   const appSecret = await getConfig('feishu.appSecret');
 
   if (!appId || !appSecret) {
-    throw new Error('飞书配置不完整');
+    throw new Error('飞书配置不完整：缺少 App ID 或 App Secret');
   }
 
   const res = await fetch(
@@ -27,10 +27,21 @@ export async function getFeishuAccessToken(): Promise<string> {
     }
   );
 
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`获取飞书 Access Token 失败: HTTP ${res.status} - ${errorText.substring(0, 200)}`);
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`飞书 API 返回非 JSON 响应: ${text.substring(0, 200)}`);
+  }
+
   const data: FeishuAccessTokenResponse = await res.json();
 
   if (data.code !== 0) {
-    throw new Error(`获取飞书 Access Token 失败: ${data.msg}`);
+    throw new Error(`获取飞书 Access Token 失败: ${data.msg} (code: ${data.code})`);
   }
 
   return data.tenant_access_token;
@@ -72,7 +83,7 @@ export async function sendFeishuTextMessage(text: string): Promise<void> {
   const chatId = await getConfig('feishu.chatId');
 
   if (!chatId) {
-    throw new Error('飞书群聊 ID 未配置');
+    throw new Error('飞书群聊 ID 未配置，请在系统设置中配置');
   }
 
   const accessToken = await getFeishuAccessToken();
@@ -97,12 +108,18 @@ export async function sendFeishuTextMessage(text: string): Promise<void> {
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`发送飞书消息失败: HTTP ${res.status} - ${errorText}`);
+    throw new Error(`发送飞书消息失败: HTTP ${res.status} - ${errorText.substring(0, 200)}`);
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`飞书 API 返回非 JSON 响应: ${text.substring(0, 200)}`);
   }
 
   const data = await res.json();
 
   if (data.code !== 0) {
-    throw new Error(`发送飞书消息失败: ${data.msg || JSON.stringify(data)}`);
+    throw new Error(`发送飞书消息失败: ${data.msg || JSON.stringify(data)} (code: ${data.code})`);
   }
 }
