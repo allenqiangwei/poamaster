@@ -5,7 +5,8 @@ import {
   AppBar,
   Toolbar,
   Typography,
-  IconButton
+  Button,
+  Box
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -23,21 +24,25 @@ export default function Header() {
   return (
     <AppBar position="static">
       <Toolbar>
-        <Typography variant="h6" component="div">
+        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
           📋 POA Master
         </Typography>
-        <IconButton
-          color="inherit"
-          onClick={() => router.push('/settings')}
-        >
-          <SettingsIcon />
-        </IconButton>
-        <IconButton
-          color="inherit"
-          onClick={handleLogout}
-        >
-          <LogoutIcon />
-        </IconButton>
+        <Box>
+          <Button
+            color="inherit"
+            startIcon={<SettingsIcon />}
+            onClick={() => router.push('/settings')}
+          >
+            设置
+          </Button>
+          <Button
+            color="inherit"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+          >
+            登出
+          </Button>
+        </Box>
       </Toolbar>
     </AppBar>
   );
