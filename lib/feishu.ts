@@ -16,7 +16,7 @@ export async function getFeishuAccessToken(): Promise<string> {
   }
 
   const res = await fetch(
-    'https://open.feishu.cn/open-api/auth/v3/tenant_access_token/internal',
+    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -54,7 +54,7 @@ export async function sendFeishuMessage(
   const accessToken = await getFeishuAccessToken();
 
   const res = await fetch(
-    'https://open.feishu.cn/open-api/im/v1/messages?receive_id_type=chat_id',
+    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
     {
       method: 'POST',
       headers: {
@@ -89,7 +89,7 @@ export async function sendFeishuTextMessage(text: string): Promise<void> {
   const accessToken = await getFeishuAccessToken();
 
   const res = await fetch(
-    'https://open.feishu.cn/open-api/im/v1/messages?receive_id_type=chat_id',
+    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
     {
       method: 'POST',
       headers: {
