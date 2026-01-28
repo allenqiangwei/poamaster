@@ -10,7 +10,6 @@ import {
   Button,
   Box
 } from '@mui/material';
-import Grid from '@mui/material/Grid2';
 import { CheckBox as TodoIcon } from '@mui/icons-material';
 
 export default function HomePage() {
@@ -22,51 +21,58 @@ export default function HomePage() {
         工具集合
       </Typography>
 
-      <Grid container spacing={3} sx={{ mt: 2 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <TodoIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
-                <Typography variant="h5">
-                  To-Do List
-                </Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary">
-                AI 驱动的任务管理工具，支持从文本、文件、图片中提取任务
+      <Box
+        sx={{
+          mt: 2,
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, 1fr)',
+            md: 'repeat(3, 1fr)'
+          },
+          gap: 3
+        }}
+      >
+        <Card>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <TodoIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
+              <Typography variant="h5">
+                To-Do List
               </Typography>
-            </CardContent>
-            <CardActions>
-              <Button
-                size="small"
-                variant="contained"
-                fullWidth
-                onClick={() => router.push('/todo')}
-              >
-                进入工具
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              AI 驱动的任务管理工具，支持从文本、文件、图片中提取任务
+            </Typography>
+          </CardContent>
+          <CardActions>
+            <Button
+              size="small"
+              variant="contained"
+              fullWidth
+              onClick={() => router.push('/todo')}
+            >
+              进入工具
+            </Button>
+          </CardActions>
+        </Card>
 
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <Card sx={{ bgcolor: 'grey.100' }}>
-            <CardContent>
-              <Typography variant="h5" gutterBottom>
-                工具 2
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                即将推出...
-              </Typography>
-            </CardContent>
-            <CardActions>
-              <Button size="small" disabled fullWidth>
-                敬请期待
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
-      </Grid>
+        <Card sx={{ bgcolor: 'grey.100' }}>
+          <CardContent>
+            <Typography variant="h5" gutterBottom>
+              工具 2
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              即将推出...
+            </Typography>
+          </CardContent>
+          <CardActions>
+            <Button size="small" disabled fullWidth>
+              敬请期待
+            </Button>
+          </CardActions>
+        </Card>
+      </Box>
     </Container>
   );
 }

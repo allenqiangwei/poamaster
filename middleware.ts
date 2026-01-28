@@ -7,6 +7,9 @@ import { verifySession } from '@/lib/auth';
  * 保护所有非公开路径，验证 Session token
  */
 
+// 使用 Node.js runtime 而非 Edge Runtime（因为需要 crypto 模块）
+export const runtime = 'nodejs';
+
 // 公开路径（无需认证）
 const PUBLIC_PATHS = ['/login', '/init', '/api/auth'];
 

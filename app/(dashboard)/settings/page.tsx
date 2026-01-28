@@ -9,8 +9,7 @@ import {
   Button,
   Box,
   Divider,
-  Alert,
-  Grid
+  Alert
 } from '@mui/material';
 
 export default function SettingsPage() {
@@ -102,40 +101,34 @@ export default function SettingsPage() {
         <Typography variant="h6" gutterBottom>
           飞书配置
         </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              label="App ID"
-              fullWidth
-              value={configs['feishu.appId']}
-              onChange={(e) =>
-                setConfigs({ ...configs, 'feishu.appId': e.target.value })
-              }
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              label="App Secret"
-              fullWidth
-              type="password"
-              value={configs['feishu.appSecret']}
-              onChange={(e) =>
-                setConfigs({ ...configs, 'feishu.appSecret': e.target.value })
-              }
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              label="通知群聊 Chat ID"
-              fullWidth
-              value={configs['feishu.chatId']}
-              onChange={(e) =>
-                setConfigs({ ...configs, 'feishu.chatId': e.target.value })
-              }
-              helperText="接收每日任务通知的群聊 ID"
-            />
-          </Grid>
-        </Grid>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="App ID"
+            fullWidth
+            value={configs['feishu.appId']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'feishu.appId': e.target.value })
+            }
+          />
+          <TextField
+            label="App Secret"
+            fullWidth
+            type="password"
+            value={configs['feishu.appSecret']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'feishu.appSecret': e.target.value })
+            }
+          />
+          <TextField
+            label="通知群聊 Chat ID"
+            fullWidth
+            value={configs['feishu.chatId']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'feishu.chatId': e.target.value })
+            }
+            helperText="接收每日任务通知的群聊 ID"
+          />
+        </Box>
       </Paper>
 
       <Box sx={{ mt: 3 }}>

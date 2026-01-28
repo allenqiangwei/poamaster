@@ -13,7 +13,7 @@ import { Prisma } from '@prisma/client';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 验证 Session
@@ -33,7 +33,7 @@ export async function PATCH(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // 检查负责人是否存在
     const existingAssignee = await prisma.assignee.findUnique({
@@ -114,7 +114,7 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 验证 Session
@@ -134,7 +134,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // 检查负责人是否存在
     const assignee = await prisma.assignee.findUnique({
