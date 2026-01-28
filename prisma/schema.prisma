@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 用户
+model User {
+  id        String    @id @default(cuid())
+  username  String    @unique
+  password  String    // bcrypt 加密
+  createdAt DateTime  @default(now())
+  sessions  Session[]
+}
+
+// Session 认证
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+}
+
+// 负责人
+model Assignee {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  feishuUserId String?  // 飞书 User ID
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tasks        Task[]
+
+  @@index([name])
+}
+
+// 任务
+model Task {
+  id         String     @id @default(cuid())
+  title      String
+  dod        String?    // Definition of Done
+  dueDate    DateTime?
+  status     TaskStatus @default(TODO)
+  assigneeId String?
+  assignee   Assignee?  @relation(fields: [assigneeId], references: [id])
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([assigneeId])
+}
+
+// 任务状态枚举
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+  POSTPONED
+}
+
+// 配置存储
+model Config {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
