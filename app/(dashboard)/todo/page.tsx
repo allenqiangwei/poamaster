@@ -21,7 +21,12 @@ import {
   OutlinedInput,
   Alert,
   Snackbar,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
 import { Add as AddIcon, Send as SendIcon } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
@@ -59,6 +64,10 @@ export default function TodoPage() {
     message: string;
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    taskId: string | null;
+  }>({ open: false, taskId: null });
 
   // 加载负责人列表
   useEffect(() => {
@@ -123,16 +132,33 @@ export default function TodoPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个任务吗？')) return;
+  const handleDelete = (id: string) => {
+    setDeleteDialog({ open: true, taskId: id });
+  };
+
+  const handleConfirmDelete = async () => {
+    const taskId = deleteDialog.taskId;
+    setDeleteDialog({ open: false, taskId: null });
+
+    if (!taskId) return;
 
     try {
-      const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(await res.text());
 
+      setSnackbar({
+        open: true,
+        message: '任务已删除',
+        severity: 'success'
+      });
       loadTasks();
     } catch (error) {
       console.error('删除任务失败:', error);
+      setSnackbar({
+        open: true,
+        message: '删除失败，请重试',
+        severity: 'error'
+      });
     }
   };
 
@@ -314,6 +340,26 @@ export default function TodoPage() {
           />
         </>
       )}
+
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, taskId: null })}
+      >
+        <DialogTitle>确认删除</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除这个任务吗？删除后无法恢复。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog({ open: false, taskId: null })}>
+            取消
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" autoFocus>
+            删除
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}
