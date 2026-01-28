@@ -21,18 +21,41 @@ AI 驱动的多工具平台，首个工具是智能任务管理系统。
 
 ## 快速开始
 
-### 1. 环境要求
+### 🚀 方式一：一键部署（推荐）
+
+```bash
+./start.sh
+```
+
+自动部署脚本会帮你完成：
+- ✅ 检查环境要求
+- ✅ 安装依赖
+- ✅ 配置环境变量（自动生成 SESSION_SECRET）
+- ✅ 初始化数据库
+- ✅ 构建项目
+- ✅ 启动服务（支持开发/生产/PM2 三种模式）
+
+**准备工作：**
+1. 确保已安装 Node.js 18+ 和 PostgreSQL 14+
+2. 创建 PostgreSQL 数据库
+3. 运行脚本后，按提示配置 DATABASE_URL
+
+---
+
+### 📝 方式二：手动部署
+
+#### 1. 环境要求
 
 - Node.js 18+
 - PostgreSQL 14+
 
-### 2. 安装依赖
+#### 2. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 3. 配置环境变量
+#### 3. 配置环境变量
 
 ```bash
 cp .env.example .env
@@ -45,14 +68,14 @@ DATABASE_URL="postgresql://user:password@localhost:5432/poamaster"
 SESSION_SECRET="your-random-32-char-secret"
 ```
 
-### 4. 初始化数据库
+#### 4. 初始化数据库
 
 ```bash
 npx prisma migrate deploy
 npx prisma generate
 ```
 
-### 5. 启动开发服务器
+#### 5. 启动开发服务器
 
 ```bash
 npm run dev
@@ -60,7 +83,7 @@ npm run dev
 
 访问 http://localhost:3000
 
-### 6. 首次使用
+#### 6. 首次使用
 
 - 首次访问会自动跳转到初始化页面
 - 设置管理员用户名和密码
