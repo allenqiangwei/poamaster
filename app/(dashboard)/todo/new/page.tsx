@@ -12,8 +12,10 @@ import {
   Button,
   Box,
   Alert,
-  CircularProgress
+  CircularProgress,
+  IconButton
 } from '@mui/material';
+import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { ExtractedTask } from '@/lib/openai';
 import TaskPreviewTable from '@/components/TaskPreviewTable';
 
@@ -124,9 +126,18 @@ export default function NewTaskPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        AI 提取任务
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+        <IconButton
+          onClick={() => router.back()}
+          sx={{ mr: 2 }}
+          aria-label="返回"
+        >
+          <ArrowBackIcon />
+        </IconButton>
+        <Typography variant="h4">
+          AI 提取任务
+        </Typography>
+      </Box>
 
       {extractedTasks.length === 0 ? (
         <Paper sx={{ p: 3, mt: 3 }}>

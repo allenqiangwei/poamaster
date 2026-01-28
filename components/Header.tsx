@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   AppBar,
   Toolbar,
@@ -10,11 +10,14 @@ import {
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  Home as HomeIcon,
+  List as ListIcon
 } from '@mui/icons-material';
 
 export default function Header() {
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     try {
@@ -28,17 +31,54 @@ export default function Header() {
     }
   };
 
+  const isActive = (path: string) => pathname === path;
+
   return (
     <AppBar position="static">
       <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+        <Typography
+          variant="h6"
+          component="div"
+          sx={{
+            cursor: 'pointer',
+            mr: 3
+          }}
+          onClick={() => router.push('/')}
+        >
           📋 POA Master
         </Typography>
-        <Box>
+
+        <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
+          <Button
+            color="inherit"
+            startIcon={<HomeIcon />}
+            onClick={() => router.push('/')}
+            sx={{
+              bgcolor: isActive('/') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
+          >
+            首页
+          </Button>
+          <Button
+            color="inherit"
+            startIcon={<ListIcon />}
+            onClick={() => router.push('/todo')}
+            sx={{
+              bgcolor: pathname?.startsWith('/todo') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
+          >
+            任务列表
+          </Button>
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             color="inherit"
             startIcon={<SettingsIcon />}
             onClick={() => router.push('/settings')}
+            sx={{
+              bgcolor: isActive('/settings') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
           >
             设置
           </Button>

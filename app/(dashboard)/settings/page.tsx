@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Container,
   Paper,
@@ -11,10 +12,13 @@ import {
   Button,
   Box,
   Divider,
-  Alert
+  Alert,
+  IconButton
 } from '@mui/material';
+import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -67,9 +71,18 @@ export default function SettingsPage() {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        ⚙️ 系统配置
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+        <IconButton
+          onClick={() => router.back()}
+          sx={{ mr: 2 }}
+          aria-label="返回"
+        >
+          <ArrowBackIcon />
+        </IconButton>
+        <Typography variant="h4">
+          ⚙️ 系统配置
+        </Typography>
+      </Box>
 
       {success && (
         <Alert severity="success" sx={{ mt: 2 }}>
