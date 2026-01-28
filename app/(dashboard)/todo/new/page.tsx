@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Container,
@@ -17,7 +17,7 @@ import {
   Tabs,
   Tab
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Upload as UploadIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Upload as UploadIcon, ContentPaste as ContentPasteIcon } from '@mui/icons-material';
 import { ExtractedTask } from '@/lib/openai';
 import TaskPreviewTable from '@/components/TaskPreviewTable';
 
@@ -29,6 +29,61 @@ export default function NewTaskPage() {
   const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
   const [inputMode, setInputMode] = useState<'text' | 'file'>('text');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // 监听全局粘贴事件
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      // 如果在文本框中粘贴，让浏览器默认处理
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      // 检查是否有图片
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            setSelectedFile(file);
+            setInputMode('file');
+            setError('');
+
+            // 生成预览
+            const url = URL.createObjectURL(file);
+            setPreviewUrl(url);
+
+            // 显示提示
+            setError('');
+          }
+          return;
+        }
+      }
+
+      // 检查是否有文本（非在输入框中）
+      const text = e.clipboardData?.getData('text');
+      if (text && text.trim().length > 0) {
+        e.preventDefault();
+        setText(text);
+        setInputMode('text');
+        setError('');
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -40,6 +95,12 @@ export default function NewTaskPage() {
       }
       setSelectedFile(file);
       setError('');
+
+      // 如果是图片，生成预览
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+      }
     }
   };
 
@@ -187,9 +248,15 @@ export default function NewTaskPage() {
               <Typography variant="h6" gutterBottom>
                 粘贴文本内容
               </Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                支持从会议记录、邮件、备忘录等文本中提取任务
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  支持从会议记录、邮件、备忘录等文本中提取任务
+                </Typography>
+                <Typography variant="body2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ContentPasteIcon fontSize="small" />
+                  Ctrl+V 快速粘贴
+                </Typography>
+              </Box>
 
               <TextField
                 multiline
@@ -198,7 +265,9 @@ export default function NewTaskPage() {
                 placeholder="例如：
 明天下午3点前，张三需要完成用户认证模块的开发，要求代码通过测试并部署。
 李四负责提交项目周报，截止今天下午5点。
-王五本周内完成数据库设计文档。"
+王五本周内完成数据库设计文档。
+
+💡 提示：也可以直接按 Ctrl+V 粘贴文本或图片"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
               />
@@ -208,40 +277,77 @@ export default function NewTaskPage() {
               <Typography variant="h6" gutterBottom>
                 上传文件
               </Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                支持 PDF、JPG、PNG、WEBP 格式
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  支持 PDF、JPG、PNG、WEBP 格式
+                </Typography>
+                <Typography variant="body2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ContentPasteIcon fontSize="small" />
+                  或直接 Ctrl+V 粘贴图片
+                </Typography>
+              </Box>
 
               <Box
                 sx={{
                   border: '2px dashed',
-                  borderColor: 'divider',
+                  borderColor: selectedFile ? 'primary.main' : 'divider',
                   borderRadius: 1,
                   p: 4,
                   textAlign: 'center',
                   bgcolor: 'grey.50'
                 }}
               >
-                <input
-                  accept=".pdf,.jpg,.jpeg,.png,.webp"
-                  style={{ display: 'none' }}
-                  id="file-upload"
-                  type="file"
-                  onChange={handleFileChange}
-                />
-                <label htmlFor="file-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<UploadIcon />}
-                  >
-                    选择文件
-                  </Button>
-                </label>
-                {selectedFile && (
-                  <Typography variant="body2" sx={{ mt: 2 }}>
-                    已选择: {selectedFile.name}
-                  </Typography>
+                {previewUrl && selectedFile?.type.startsWith('image/') ? (
+                  <Box>
+                    <Box
+                      component="img"
+                      src={previewUrl}
+                      alt="预览"
+                      sx={{
+                        maxWidth: '100%',
+                        maxHeight: 400,
+                        mb: 2,
+                        borderRadius: 1
+                      }}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedFile.name}
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setPreviewUrl(null);
+                      }}
+                      sx={{ mt: 1 }}
+                    >
+                      清除
+                    </Button>
+                  </Box>
+                ) : (
+                  <>
+                    <input
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      style={{ display: 'none' }}
+                      id="file-upload"
+                      type="file"
+                      onChange={handleFileChange}
+                    />
+                    <label htmlFor="file-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        startIcon={<UploadIcon />}
+                      >
+                        选择文件
+                      </Button>
+                    </label>
+                    {selectedFile && (
+                      <Typography variant="body2" sx={{ mt: 2 }}>
+                        已选择: {selectedFile.name}
+                      </Typography>
+                    )}
+                  </>
                 )}
               </Box>
             </>
