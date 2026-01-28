@@ -46,9 +46,11 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
 
       // 动态导入 pdf-parse
-      const pdf = (await import('pdf-parse')).default;
-      const pdfData = await pdf(buffer);
-      extractedText = pdfData.text;
+      const { PDFParse } = await import('pdf-parse');
+      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      const textResult = await parser.getText();
+      extractedText = textResult.text;
+      await parser.destroy();
 
       if (!extractedText || extractedText.trim().length === 0) {
         return NextResponse.json(
