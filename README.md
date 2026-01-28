@@ -1,36 +1,123 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# POA Master
 
-## Getting Started
+AI 驱动的多工具平台，首个工具是智能任务管理系统。
 
-First, run the development server:
+## 功能特性
+
+- 🤖 **AI 任务提取**：从文本、文件、图片中自动提取任务信息
+- 📊 **任务管理**：支持多状态、负责人、截止时间管理
+- 🔔 **飞书通知**：每天定时推送任务提醒
+- 🔐 **安全认证**：简单的用户名密码认证系统
+- ⚙️ **统一配置**：集中管理所有工具的配置
+
+## 技术栈
+
+- Next.js 14 (App Router)
+- TypeScript
+- PostgreSQL + Prisma
+- Material UI
+- OpenAI GPT-4o
+- 飞书开放平台 API
+
+## 快速开始
+
+### 1. 环境要求
+
+- Node.js 18+
+- PostgreSQL 14+
+
+### 2. 安装依赖
+
+```bash
+npm install
+```
+
+### 3. 配置环境变量
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件，填入数据库连接信息和 Session 密钥：
+
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/poamaster"
+SESSION_SECRET="your-random-32-char-secret"
+```
+
+### 4. 初始化数据库
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
+### 5. 启动开发服务器
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+访问 http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 6. 首次使用
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- 首次访问会自动跳转到初始化页面
+- 设置管理员用户名和密码
+- 登录后访问设置页面配置 OpenAI API Key 和飞书应用
 
-## Learn More
+## 生产部署
 
-To learn more about Next.js, take a look at the following resources:
+### 方式一：本地部署
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# 构建应用
+npm run build
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# 启动应用
+npm run start
 
-## Deploy on Vercel
+# 使用 PM2 持久化运行
+npm install -g pm2
+pm2 start npm --name poamaster -- start
+pm2 save
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 方式二：Docker 部署
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+docker-compose up -d
+```
+
+## 配置说明
+
+### OpenAI
+
+1. 访问 https://platform.openai.com/
+2. 创建 API Key
+3. 在设置页面填入 API Key
+
+### 飞书
+
+1. 访问 https://open.feishu.cn/
+2. 创建企业自建应用
+3. 获取 App ID 和 App Secret
+4. 添加机器人到群聊，获取 Chat ID
+5. 在设置页面填入配置
+
+## 开发指南
+
+```bash
+# 启动开发服务器
+npm run dev
+
+# 数据库管理界面
+npx prisma studio
+
+# 创建数据库迁移
+npx prisma migrate dev --name description
+```
+
+## License
+
+MIT
