@@ -10,7 +10,12 @@ import {
   Tabs,
   Tab,
   Button,
-  Typography
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Stack
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
@@ -22,13 +27,42 @@ interface Task {
   dueDate: string | null;
   status: TaskStatus;
   assignee: { id: string; name: string } | null;
+  dod: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
+
+interface Assignee {
+  id: string;
+  name: string;
+}
+
+type SortOption = 'dueDate-asc' | 'dueDate-desc' | 'createdAt-desc' | 'createdAt-asc';
 
 export default function TodoPage() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState<TaskStatus | 'ALL'>('ALL');
+  const [selectedAssignee, setSelectedAssignee] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<SortOption>('dueDate-asc');
+
+  // 加载负责人列表
+  useEffect(() => {
+    const loadAssignees = async () => {
+      try {
+        const res = await fetch('/api/assignees');
+        const data = await res.json();
+        if (data.success) {
+          setAssignees(data.data);
+        }
+      } catch (error) {
+        console.error('加载负责人失败:', error);
+      }
+    };
+    loadAssignees();
+  }, []);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -36,6 +70,9 @@ export default function TodoPage() {
       const params = new URLSearchParams();
       if (currentTab !== 'ALL') {
         params.set('status', currentTab);
+      }
+      if (selectedAssignee !== 'ALL') {
+        params.set('assigneeId', selectedAssignee);
       }
 
       const res = await fetch(`/api/tasks?${params}`);
@@ -53,7 +90,7 @@ export default function TodoPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentTab]);
+  }, [currentTab, selectedAssignee]);
 
   useEffect(() => {
     loadTasks();
@@ -91,15 +128,25 @@ export default function TodoPage() {
     await handleStatusChange(id, 'DONE');
   };
 
-  const getTaskCountByStatus = (status: TaskStatus | 'ALL') => {
-    if (status === 'ALL') return tasks.length;
-    return tasks.filter((t) => t.status === status).length;
-  };
-
-  const filteredTasks =
-    currentTab === 'ALL'
-      ? tasks
-      : tasks.filter((t) => t.status === currentTab);
+  // 客户端排序
+  const sortedTasks = [...tasks].sort((a, b) => {
+    switch (sortBy) {
+      case 'dueDate-asc':
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      case 'dueDate-desc':
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime();
+      case 'createdAt-asc':
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case 'createdAt-desc':
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      default:
+        return 0;
+    }
+  });
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -125,34 +172,64 @@ export default function TodoPage() {
         value={currentTab}
         onChange={(_, value) => setCurrentTab(value)}
         sx={{ mb: 3 }}
+        variant="scrollable"
+        scrollButtons="auto"
       >
-        <Tab label={`全部 (${getTaskCountByStatus('ALL')})`} value="ALL" />
-        <Tab label={`待办 (${getTaskCountByStatus('TODO')})`} value="TODO" />
-        <Tab
-          label={`进行中 (${getTaskCountByStatus('IN_PROGRESS')})`}
-          value="IN_PROGRESS"
-        />
-        <Tab label={`已完成 (${getTaskCountByStatus('DONE')})`} value="DONE" />
-        <Tab
-          label={`已取消 (${getTaskCountByStatus('CANCELLED')})`}
-          value="CANCELLED"
-        />
-        <Tab
-          label={`已推迟 (${getTaskCountByStatus('POSTPONED')})`}
-          value="POSTPONED"
-        />
+        <Tab label="全部" value="ALL" />
+        <Tab label="待办" value="TODO" />
+        <Tab label="进行中" value="IN_PROGRESS" />
+        <Tab label="已完成" value="DONE" />
+        <Tab label="已取消" value="CANCELLED" />
+        <Tab label="已推迟" value="POSTPONED" />
       </Tabs>
+
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel>负责人</InputLabel>
+          <Select
+            value={selectedAssignee}
+            label="负责人"
+            onChange={(e) => setSelectedAssignee(e.target.value)}
+          >
+            <MenuItem value="ALL">全部</MenuItem>
+            {assignees.map((assignee) => (
+              <MenuItem key={assignee.id} value={assignee.id}>
+                {assignee.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel>排序</InputLabel>
+          <Select
+            value={sortBy}
+            label="排序"
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+          >
+            <MenuItem value="dueDate-asc">截止时间 ↑</MenuItem>
+            <MenuItem value="dueDate-desc">截止时间 ↓</MenuItem>
+            <MenuItem value="createdAt-desc">创建时间 ↓</MenuItem>
+            <MenuItem value="createdAt-asc">创建时间 ↑</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
 
       {loading ? (
         <Typography>加载中...</Typography>
       ) : (
-        <TaskTable
-          tasks={filteredTasks}
-          onEdit={(task) => router.push(`/todo/${task.id}`)}
-          onDelete={handleDelete}
-          onStatusChange={handleStatusChange}
-          onMarkDone={handleMarkDone}
-        />
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            共 {sortedTasks.length} 个任务
+          </Typography>
+          <TaskTable
+            tasks={sortedTasks}
+            onEdit={(task) => router.push(`/todo/${task.id}`)}
+            onDelete={handleDelete}
+            onStatusChange={handleStatusChange}
+            onMarkDone={handleMarkDone}
+          />
+        </>
       )}
     </Container>
   );
