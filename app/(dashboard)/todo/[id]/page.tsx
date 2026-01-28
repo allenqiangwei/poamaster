@@ -16,7 +16,13 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  IconButton
+  IconButton,
+  Autocomplete,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText
 } from '@mui/material';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
@@ -37,6 +43,11 @@ export default function EditTaskPage({ params }: TaskPageProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [assigneeInput, setAssigneeInput] = useState<string>('');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    assigneeName: string;
+  }>({ open: false, assigneeName: '' });
   const [formData, setFormData] = useState({
     title: '',
     dod: '',
@@ -74,6 +85,8 @@ export default function EditTaskPage({ params }: TaskPageProps) {
           status: task.status,
           assigneeId: task.assigneeId || ''
         });
+        // 设置负责人输入框的初始值
+        setAssigneeInput(task.assignee?.name || '');
       } else {
         setError('任务不存在');
       }
@@ -102,6 +115,65 @@ export default function EditTaskPage({ params }: TaskPageProps) {
       return;
     }
 
+    // 检查负责人输入
+    const trimmedAssigneeName = assigneeInput.trim();
+    let finalAssigneeId = formData.assigneeId;
+
+    if (trimmedAssigneeName) {
+      // 查找负责人是否存在
+      const existingAssignee = assignees.find(
+        (a) => a.name.toLowerCase() === trimmedAssigneeName.toLowerCase()
+      );
+
+      if (existingAssignee) {
+        // 负责人已存在，使用其 ID
+        finalAssigneeId = existingAssignee.id;
+      } else {
+        // 负责人不存在，弹出确认对话框
+        setConfirmDialog({
+          open: true,
+          assigneeName: trimmedAssigneeName
+        });
+        return; // 等待用户确认
+      }
+    } else {
+      // 没有输入负责人，设为 null
+      finalAssigneeId = '';
+    }
+
+    // 保存任务
+    await saveTask(finalAssigneeId);
+  };
+
+  const handleConfirmCreateAssignee = async () => {
+    const newAssigneeName = confirmDialog.assigneeName;
+    setConfirmDialog({ open: false, assigneeName: '' });
+
+    try {
+      // 创建新负责人
+      const createRes = await fetch('/api/assignees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newAssigneeName })
+      });
+
+      const createData = await createRes.json();
+
+      if (createRes.ok && createData.success) {
+        const newAssigneeId = createData.data.id;
+        // 添加到本地列表
+        setAssignees([...assignees, createData.data]);
+        // 保存任务
+        await saveTask(newAssigneeId);
+      } else {
+        setError(createData.error || '创建负责人失败');
+      }
+    } catch (err) {
+      setError('创建负责人失败');
+    }
+  };
+
+  const saveTask = async (assigneeId: string) => {
     setSaving(true);
     setError('');
 
@@ -114,7 +186,7 @@ export default function EditTaskPage({ params }: TaskPageProps) {
           dod: formData.dod.trim() || null,
           dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
           status: formData.status,
-          assigneeId: formData.assigneeId || null
+          assigneeId: assigneeId || null
         })
       });
 
@@ -220,23 +292,31 @@ export default function EditTaskPage({ params }: TaskPageProps) {
             </Select>
           </FormControl>
 
-          <FormControl fullWidth>
-            <InputLabel>负责人</InputLabel>
-            <Select
-              value={formData.assigneeId}
-              label="负责人"
-              onChange={(e) => setFormData({ ...formData, assigneeId: e.target.value })}
-            >
-              <MenuItem value="">
-                <em>未分配</em>
-              </MenuItem>
-              {assignees.map((assignee) => (
-                <MenuItem key={assignee.id} value={assignee.id}>
-                  {assignee.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            freeSolo
+            options={assignees.map((a) => a.name)}
+            value={assigneeInput}
+            onInputChange={(_, newValue) => {
+              setAssigneeInput(newValue);
+              // 如果输入的名字匹配现有负责人，更新 assigneeId
+              const matchedAssignee = assignees.find(
+                (a) => a.name.toLowerCase() === newValue.toLowerCase()
+              );
+              if (matchedAssignee) {
+                setFormData({ ...formData, assigneeId: matchedAssignee.id });
+              } else {
+                setFormData({ ...formData, assigneeId: '' });
+              }
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="负责人"
+                placeholder="选择或输入负责人名字"
+                helperText="可以输入新的负责人名字，保存时会提示创建"
+              />
+            )}
+          />
 
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', gap: 2 }}>
@@ -261,6 +341,28 @@ export default function EditTaskPage({ params }: TaskPageProps) {
           </Box>
         </Box>
       </Paper>
+
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog({ open: false, assigneeName: '' })}
+      >
+        <DialogTitle>创建新负责人</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            负责人 <strong>"{confirmDialog.assigneeName}"</strong> 不存在。
+            <br />
+            是否创建该负责人？
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialog({ open: false, assigneeName: '' })}>
+            取消
+          </Button>
+          <Button onClick={handleConfirmCreateAssignee} variant="contained" autoFocus>
+            创建并保存
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
