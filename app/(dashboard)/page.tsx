@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import {
   Container,
-  Grid,
   Card,
   CardContent,
   CardActions,
@@ -11,6 +10,7 @@ import {
   Button,
   Box
 } from '@mui/material';
+import Grid from '@mui/material/Grid2';
 import { CheckBox as TodoIcon } from '@mui/icons-material';
 
 export default function HomePage() {
@@ -23,7 +23,7 @@ export default function HomePage() {
       </Typography>
 
       <Grid container spacing={3} sx={{ mt: 2 }}>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -49,7 +49,7 @@ export default function HomePage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Card sx={{ bgcolor: 'grey.100' }}>
             <CardContent>
               <Typography variant="h5" gutterBottom>
