@@ -4,6 +4,69 @@ import { verifySession } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
 /**
+ * GET /api/assignees/[id]
+ * 获取负责人详情及其关联的任务
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // 验证 Session
+    const token = request.cookies.get('session')?.value;
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const session = await verifySession(token);
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid session' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    // 获取负责人详情，包括关联的任务
+    const assignee = await prisma.assignee.findUnique({
+      where: { id },
+      include: {
+        tasks: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+        _count: {
+          select: { tasks: true },
+        },
+      },
+    });
+
+    if (!assignee) {
+      return NextResponse.json(
+        { success: false, error: 'Assignee not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: assignee,
+    });
+  } catch (error) {
+    console.error('Get assignee error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch assignee' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * PATCH /api/assignees/[id]
  * 更新负责人
  * Body: {

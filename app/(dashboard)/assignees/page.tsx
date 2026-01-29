@@ -235,25 +235,45 @@ export default function AssigneesPage() {
               </TableRow>
             ) : (
               assignees.map((assignee) => (
-                <TableRow key={assignee.id}>
-                  <TableCell>{assignee.name}</TableCell>
+                <TableRow
+                  key={assignee.id}
+                  hover
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => router.push(`/assignees/${assignee.id}`)}
+                >
+                  <TableCell>
+                    <Typography
+                      sx={{
+                        color: 'primary.main',
+                        '&:hover': { textDecoration: 'underline' }
+                      }}
+                    >
+                      {assignee.name}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     {assignee.feishuUserId || <em style={{ color: '#999' }}>未设置</em>}
                   </TableCell>
                   <TableCell align="right">
                     {assignee._count?.tasks || 0}
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <IconButton
                       size="small"
-                      onClick={() => handleOpenDialog(assignee)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenDialog(assignee);
+                      }}
                       color="primary"
                     >
                       <EditIcon />
                     </IconButton>
                     <IconButton
                       size="small"
-                      onClick={() => handleDelete(assignee.id, assignee.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(assignee.id, assignee.name);
+                      }}
                       color="error"
                     >
                       <DeleteIcon />

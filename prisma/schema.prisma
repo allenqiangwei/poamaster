@@ -37,6 +37,10 @@ model Assignee {
   updatedAt    DateTime @updatedAt
   tasks        Task[]
 
+  // 对话洞察关系
+  artifacts      Artifact[]
+  confirmedItems ConfirmedItem[]
+
   @@index([name])
 }
 
@@ -72,4 +76,122 @@ model Config {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// ========== 对话洞察相关模型 ==========
+
+// Artifact: 一次上传的对话文件
+model Artifact {
+  id           String   @id @default(cuid())
+  assigneeId   String
+
+  // 文件信息
+  fileName     String
+  fileType     String   // txt/docx/pdf
+  filePath     String   // 存储路径
+  charCount    Int
+  pageCount    Int?     // PDF 页数
+
+  // 处理状态
+  status       String   @default("uploading")
+  // uploading/parsing/extracting/deduping/ready/confirmed/failed
+  errorMessage String?
+
+  // LLM 提取信息
+  modelName    String?  // gpt-4o
+  promptVersion String? // 用于追溯不同 prompt 版本
+  latencyMs    Int?     // 处理耗时
+
+  // 时间戳
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关系
+  assignee         Assignee @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
+  draftItems       DraftItem[]
+  confirmedItems   ConfirmedItem[]
+
+  @@index([assigneeId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// DraftItem: 提取后的草稿条目(审核阶段)
+model DraftItem {
+  id           String   @id @default(cuid())
+  artifactId   String
+
+  // 维度信息
+  dimension    String   // focus/goal/obstacle/decision/risk/action
+  sortOrder    Int      // 同维度内排序
+
+  // 条目内容
+  content      String   @db.Text
+  evidence     String?  @db.Text  // 证据句子(仅 Draft 保留,入库后删除)
+
+  // 拍板维度专属字段
+  decisionType String?  // must_decide/need_intervene(仅 decision 维度)
+
+  // 行动项维度专属字段
+  action       String?  @db.Text  // 行动项描述(仅 action 维度)
+  etaText      String?  // ETA 原文(仅 action 维度)
+
+  // 编辑追踪
+  isEdited     Boolean  @default(false)
+  isDeleted    Boolean  @default(false)
+  movedFrom    String?  // 原始维度(如果被移动)
+
+  // 去重元信息
+  mergedFrom   Json?    // 被合并的条目ID列表 [id1, id2]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关系
+  artifact     Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@index([artifactId])
+  @@index([dimension])
+}
+
+// ConfirmedItem: 确认入库的条目(长期维护)
+model ConfirmedItem {
+  id           String   @id @default(cuid())
+  assigneeId   String
+  artifactId   String   // 来源追溯
+
+  // 维度信息
+  dimension    String
+  sortOrder    Int
+
+  // 条目内容(与 DraftItem 类似,但无 evidence)
+  content      String   @db.Text
+  decisionType String?
+  action       String?  @db.Text
+  etaText      String?
+
+  // 状态管理
+  status       String   @default("active") // active/completed/archived
+
+  // 智能分析标记
+  smartFlags   Json?
+  // { isDuplicate: bool, isOutdated: bool, relatedIds: [], confidence: float }
+
+  // ToDo 推送信息
+  pushedToTodo Boolean  @default(false)
+  todoTaskId   String?  // 关联的 ToDo 任务 ID
+  pushError    String?  // 推送失败原因
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关系
+  assignee     Assignee @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
+  artifact     Artifact @relation(fields: [artifactId], references: [id])
+
+  @@index([assigneeId])
+  @@index([dimension])
+  @@index([status])
+  @@index([createdAt])
+  @@index([pushedToTodo])
 }
