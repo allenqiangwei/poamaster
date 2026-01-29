@@ -8,7 +8,11 @@ export const FILE_UPLOAD_CONFIG = {
   ALLOWED_TYPES: [
     'text/plain',
     'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp'
   ],
   MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
   UPLOAD_DIR: 'uploads/insights',

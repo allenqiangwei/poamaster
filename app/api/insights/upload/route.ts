@@ -21,6 +21,10 @@ function validateFileTypeMatch(file: File): boolean {
     'text/plain': ['.txt'],
     'application/pdf': ['.pdf'],
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/jpg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'image/webp': ['.webp'],
   };
 
   const allowedExts = mimeToExtMap[file.type];
@@ -159,11 +163,21 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Upload error:', error);
 
-    // Don't expose internal error details
-    const message =
-      error instanceof Error && error.message.includes('Invalid')
-        ? error.message
-        : '文件上传失败,请稍后重试';
+    // Provide user-friendly error messages
+    let message = '文件上传失败,请稍后重试';
+
+    if (error instanceof Error) {
+      if (error.message.includes('Invalid') ||
+          error.message.includes('网络连接') ||
+          error.message.includes('图片识别失败') ||
+          error.message.includes('超时')) {
+        message = error.message;
+      } else if (error.message.includes('Connection error') ||
+                 error.message.includes('ECONNRESET') ||
+                 error.message.includes('fetch failed')) {
+        message = '网络连接失败。请检查网络连接、代理设置，或稍后重试';
+      }
+    }
 
     return NextResponse.json(
       {

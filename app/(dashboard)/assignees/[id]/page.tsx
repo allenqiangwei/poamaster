@@ -31,6 +31,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -39,6 +41,7 @@ import {
   Delete as DeleteIcon,
   PlaylistAdd as AddToTodoIcon,
   AutoAwesome as InsightIcon,
+  TextFields as TextFieldsIcon,
 } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
 
@@ -121,17 +124,23 @@ function UploadDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [textInput, setTextInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
-  const allowedTypes = ['.txt', '.pdf', '.docx'];
+  const allowedTypes = ['.txt', '.pdf', '.docx', '.jpg', '.jpeg', '.png', '.webp'];
   const allowedMimeTypes = [
     'text/plain',
     'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
   ];
 
   const validateFile = (file: File): boolean => {
@@ -168,21 +177,80 @@ function UploadDialog({
       setFile(droppedFile);
       setError(null);
     } else {
-      setError('不支持的文件格式，请上传 .txt, .pdf 或 .docx 文件');
+      setError('不支持的文件格式，请上传 .txt, .pdf, .docx 或图片文件');
     }
   };
 
+  const handlePaste = (e: ClipboardEvent) => {
+    if (loading) return;
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // 检查是否是图片
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+
+        const blob = item.getAsFile();
+        if (blob) {
+          // 从 blob 创建 File 对象，添加合适的文件名
+          const extension = item.type.split('/')[1];
+          const fileName = `pasted-image-${Date.now()}.${extension}`;
+          const file = new File([blob], fileName, { type: item.type });
+
+          if (validateFile(file)) {
+            setFile(file);
+            setError(null);
+          } else {
+            setError('不支持的图片格式');
+          }
+        }
+        break;
+      }
+    }
+  };
+
+  // 添加和移除粘贴事件监听器
+  useEffect(() => {
+    if (open) {
+      window.addEventListener('paste', handlePaste);
+      return () => {
+        window.removeEventListener('paste', handlePaste);
+      };
+    }
+  }, [open, loading]);
+
   const handleUpload = async () => {
-    if (!file) return;
+    // 验证输入
+    if (inputMode === 'file' && !file) {
+      setError('请选择文件');
+      return;
+    }
+    if (inputMode === 'text' && !textInput.trim()) {
+      setError('请输入对话内容');
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setProgress(10);
 
     try {
+      // 如果是文本模式，创建一个 txt 文件
+      let uploadFile = file;
+      if (inputMode === 'text') {
+        const blob = new Blob([textInput], { type: 'text/plain' });
+        uploadFile = new File([blob], `conversation-${Date.now()}.txt`, { type: 'text/plain' });
+      }
+
+      if (!uploadFile) return;
+
       // Step 1: Upload file
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       formData.append('assigneeId', assigneeId);
 
       setProgress(30);
@@ -228,6 +296,7 @@ function UploadDialog({
   const handleClose = () => {
     if (!loading) {
       setFile(null);
+      setTextInput('');
       setError(null);
       setProgress(0);
       setIsDragging(false);
@@ -237,7 +306,7 @@ function UploadDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>上传对话文件</DialogTitle>
+      <DialogTitle>上传对话</DialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -245,7 +314,32 @@ function UploadDialog({
           </Alert>
         )}
 
-        <Box
+        {/* 输入模式切换 */}
+        <ToggleButtonGroup
+          value={inputMode}
+          exclusive
+          onChange={(_, newMode) => {
+            if (newMode && !loading) {
+              setInputMode(newMode);
+              setError(null);
+            }
+          }}
+          fullWidth
+          sx={{ mt: 2, mb: 3 }}
+        >
+          <ToggleButton value="file">
+            <UploadFileIcon sx={{ mr: 1 }} />
+            上传文件
+          </ToggleButton>
+          <ToggleButton value="text">
+            <TextFieldsIcon sx={{ mr: 1 }} />
+            直接输入
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        {/* 文件上传模式 */}
+        {inputMode === 'file' && (
+          <Box
           sx={{
             mt: 2,
             p: 4,
@@ -274,7 +368,7 @@ function UploadDialog({
           <input
             id="file-upload-input"
             type="file"
-            accept=".txt,.pdf,.docx"
+            accept=".txt,.pdf,.docx,.jpg,.jpeg,.png,.webp"
             onChange={(e) => {
               const selectedFile = e.target.files?.[0];
               if (selectedFile && validateFile(selectedFile)) {
@@ -300,14 +394,42 @@ function UploadDialog({
           ) : (
             <>
               <Typography variant="body1" color={isDragging ? 'primary.main' : 'text.primary'}>
-                {isDragging ? '松开以上传文件' : '拖拽文件到此处，或点击选择'}
+                {isDragging ? '松开以上传文件' : '拖拽文件、点击选择，或粘贴截图'}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                支持的格式: .txt, .pdf, .docx
+                支持的格式: .txt, .pdf, .docx, .jpg, .png, .webp
+              </Typography>
+              <Typography variant="caption" color="primary.main" sx={{ mt: 0.5, display: 'block' }}>
+                💡 可直接粘贴剪贴板中的图片 (⌘+V / Ctrl+V)
               </Typography>
             </>
           )}
         </Box>
+        )}
+
+        {/* 文字输入模式 */}
+        {inputMode === 'text' && (
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={12}
+              placeholder="在此粘贴或输入对话内容...&#10;&#10;支持直接粘贴微信、钉钉、Slack 等聊天记录"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              disabled={loading}
+              variant="outlined"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontFamily: 'monospace',
+                },
+              }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              {textInput.length} 字符
+            </Typography>
+          </Box>
+        )}
 
         {loading && (
           <Box sx={{ mt: 2 }}>
@@ -325,10 +447,14 @@ function UploadDialog({
         <Button
           variant="contained"
           onClick={handleUpload}
-          disabled={!file || loading}
-          startIcon={<UploadFileIcon />}
+          disabled={
+            loading ||
+            (inputMode === 'file' && !file) ||
+            (inputMode === 'text' && !textInput.trim())
+          }
+          startIcon={inputMode === 'file' ? <UploadFileIcon /> : <TextFieldsIcon />}
         >
-          {loading ? '处理中...' : '上传并提取'}
+          {loading ? '处理中...' : inputMode === 'file' ? '上传并提取' : '提交并提取'}
         </Button>
       </DialogActions>
     </Dialog>

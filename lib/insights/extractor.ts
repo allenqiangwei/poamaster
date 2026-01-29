@@ -108,6 +108,13 @@ export class InsightsExtractor {
       return this.convertToItems(parsed);
     } catch (error) {
       if (error instanceof Error) {
+        // 提供更友好的连接错误信息
+        if (error.message.includes('Connection error') || error.message.includes('ECONNRESET') || error.message.includes('fetch failed')) {
+          throw new Error('网络连接错误。请检查网络连接、代理设置，或稍后重试');
+        }
+        if (error.message.includes('timeout') || error.message.includes('timed out')) {
+          throw new Error('请求超时。请稍后重试或检查网络连接');
+        }
         throw new Error(`提取失败: ${error.message}`);
       }
       throw new Error('提取失败: 未知错误');

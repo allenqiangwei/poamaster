@@ -32,8 +32,8 @@ export async function getOpenAIClient(): Promise<OpenAI> {
 
   const clientConfig: any = {
     apiKey,
-    timeout: 60 * 1000, // 60 seconds timeout
-    maxRetries: 2, // Retry failed requests twice
+    timeout: 120 * 1000, // 120 seconds timeout (increased for image processing)
+    maxRetries: 3, // Retry failed requests 3 times
   };
 
   // 如果配置了代理，使用 fetchOptions 配置 undici.ProxyAgent
@@ -186,6 +186,11 @@ ${text}`;
   } catch (error) {
     // Handle specific OpenAI errors
     if (error instanceof Error) {
+      // Connection errors
+      if (error.message.includes('Connection error') || error.message.includes('ECONNRESET') || error.message.includes('fetch failed')) {
+        throw new Error('网络连接失败。请检查网络连接、代理设置，或稍后再试');
+      }
+
       // Timeout errors
       if (error.message.includes('timeout') || error.message.includes('timed out')) {
         throw new Error('请求超时。请检查网络连接或稍后再试');
