@@ -215,8 +215,12 @@ export default function TodoPage() {
     }
   };
 
-  // 客户端排序
-  const sortedTasks = [...tasks].sort((a, b) => {
+  // 客户端过滤和排序
+  const filteredTasks = currentTab === 'ALL'
+    ? tasks.filter(task => task.status !== 'DONE')
+    : tasks;
+
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
     switch (sortBy) {
       case 'dueDate-asc':
         if (!a.dueDate) return 1;
