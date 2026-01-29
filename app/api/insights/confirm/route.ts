@@ -4,6 +4,70 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import type { DraftItemData } from '@/lib/insights/types';
+import { DIMENSIONS } from '@/lib/insights/types';
+
+// ========== Validation Function ==========
+
+function validateItems(items: any[]): items is Array<{
+  dimension: string;
+  content: string;
+  decisionType?: string;
+  action?: string;
+  etaText?: string;
+}> {
+  // Check array is non-empty
+  if (items.length === 0) {
+    throw new Error('确认项目列表不能为空');
+  }
+
+  // Check reasonable size limit
+  if (items.length > 200) {
+    throw new Error('确认项目数量过多（最多 200 个）');
+  }
+
+  const validDimensions = Object.values(DIMENSIONS);
+
+  for (const item of items) {
+    // Validate required fields
+    if (!item || typeof item !== 'object') {
+      throw new Error('无效的项目格式');
+    }
+
+    if (!item.dimension || typeof item.dimension !== 'string') {
+      throw new Error('项目缺少必需字段: dimension');
+    }
+
+    if (!item.content || typeof item.content !== 'string' || item.content.trim().length === 0) {
+      throw new Error('项目缺少必需字段: content');
+    }
+
+    // Validate dimension value
+    if (!validDimensions.includes(item.dimension as any)) {
+      throw new Error(`无效的维度值: ${item.dimension}`);
+    }
+
+    // Validate optional fields if present
+    if (item.decisionType !== undefined && item.decisionType !== null) {
+      if (typeof item.decisionType !== 'string') {
+        throw new Error('decisionType 必须是字符串');
+      }
+    }
+
+    if (item.action !== undefined && item.action !== null) {
+      if (typeof item.action !== 'string') {
+        throw new Error('action 必须是字符串');
+      }
+    }
+
+    if (item.etaText !== undefined && item.etaText !== null) {
+      if (typeof item.etaText !== 'string') {
+        throw new Error('etaText 必须是字符串');
+      }
+    }
+  }
+
+  return true;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +95,16 @@ export async function POST(request: NextRequest) {
     if (!artifactId || !items || !Array.isArray(items)) {
       return NextResponse.json(
         { success: false, error: '缺少必需参数: artifactId 和 items' },
+        { status: 400 }
+      );
+    }
+
+    // Validate items content
+    try {
+      validateItems(items);
+    } catch (error) {
+      return NextResponse.json(
+        { success: false, error: error instanceof Error ? error.message : '无效的项目数据' },
         { status: 400 }
       );
     }
@@ -73,9 +147,22 @@ export async function POST(request: NextRequest) {
 
     // 5. Confirm items in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 5a. Create ConfirmedItems from the provided items
+      // 5a. Atomically update status with condition (prevents race condition)
+      const updated = await tx.artifact.updateMany({
+        where: {
+          id: artifactId,
+          status: 'ready'  // Only update if still 'ready'
+        },
+        data: { status: 'confirmed' },
+      });
+
+      if (updated.count === 0) {
+        throw new Error('文件已确认或状态不正确');
+      }
+
+      // 5b. Create ConfirmedItems from the provided items
       const confirmedItems = await tx.confirmedItem.createMany({
-        data: items.map((item: any, index: number) => ({
+        data: items.map((item, index) => ({
           assigneeId: artifact.assigneeId,
           artifactId: artifact.id,
           dimension: item.dimension,
@@ -88,15 +175,9 @@ export async function POST(request: NextRequest) {
         })),
       });
 
-      // 5b. Delete all DraftItems for this artifact
+      // 5c. Delete all DraftItems for this artifact
       await tx.draftItem.deleteMany({
         where: { artifactId },
-      });
-
-      // 5c. Update Artifact status to 'confirmed'
-      await tx.artifact.update({
-        where: { id: artifactId },
-        data: { status: 'confirmed' },
       });
 
       return { count: confirmedItems.count };
