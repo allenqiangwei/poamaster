@@ -1,0 +1,44 @@
+{
+  "defaultMode": "acceptEdits",
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm install)",
+      "Bash(npm uninstall *)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Read(src/**)",
+      "Read(app/**)",
+      "Read(components/**)",
+      "Read(lib/**)",
+      "Read(prisma/**)",
+      "Read(public/**)",
+      "Read(package.json)",
+      "Read(tsconfig.json)",
+      "Read(next.config.*)",
+      "Edit(src/**)",
+      "Edit(app/**)",
+      "Edit(components/**)",
+      "Edit(lib/**)",
+      "Edit(prisma/**)",
+      "Edit(public/**)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.local)",
+      "Read(.env.production)",
+      "Read(.env.*)",
+      "Edit(.env*)",
+      "Bash(rm -rf *)",
+      "Bash(rm -rf /*)"
+    ]
+  }
+}
