@@ -101,7 +101,21 @@ export class FileStorage {
     await fs.unlink(fullPathResolved);
   }
 
-  getFullPath(relativePath: string): string {
-    return path.join(this.uploadDir, relativePath);
+  async getFullPath(relativePath: string): Promise<string> {
+    if (!relativePath || typeof relativePath !== 'string') {
+      throw new Error('Invalid path');
+    }
+
+    const fullPath = path.join(this.uploadDir, relativePath);
+
+    // Validate path is within upload directory (same as deleteFile)
+    const uploadDirResolved = await fs.realpath(this.uploadDir);
+    const fullPathResolved = path.resolve(this.uploadDir, relativePath);
+
+    if (!fullPathResolved.startsWith(uploadDirResolved)) {
+      throw new Error('Path traversal detected');
+    }
+
+    return fullPathResolved;
   }
 }

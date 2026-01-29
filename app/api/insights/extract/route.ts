@@ -36,16 +36,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { artifactId } = body;
 
-    if (!artifactId) {
+    if (!artifactId || typeof artifactId !== 'string') {
       return NextResponse.json(
-        { success: false, error: '缺少必需参数: artifactId' },
+        { success: false, error: '缺少或无效的 artifactId 参数' },
         { status: 400 }
       );
     }
 
-    // 3. Fetch artifact from database
+    // Validate CUID format
+    if (!/^c[a-z0-9]{24}$/.test(artifactId)) {
+      return NextResponse.json(
+        { success: false, error: '无效的 artifactId 格式' },
+        { status: 400 }
+      );
+    }
+
+    // 3. Fetch artifact from database with assignee validation
     const artifact = await prisma.artifact.findUnique({
       where: { id: artifactId },
+      include: { assignee: true },
     });
 
     if (!artifact) {
@@ -55,22 +64,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (artifact.status !== 'ready') {
+    if (!artifact.assignee) {
       return NextResponse.json(
-        { success: false, error: `文件状态不正确: ${artifact.status}` },
-        { status: 400 }
+        { success: false, error: '关联的负责人不存在' },
+        { status: 404 }
       );
     }
 
-    // 4. Update status to 'extracting'
-    await prisma.artifact.update({
-      where: { id: artifactId },
+    // 4. Atomically update status to 'extracting' (prevents race condition)
+    const updated = await prisma.artifact.updateMany({
+      where: {
+        id: artifactId,
+        status: 'ready'  // Only update if still 'ready'
+      },
       data: { status: 'extracting' },
     });
 
+    if (updated.count === 0) {
+      return NextResponse.json(
+        { success: false, error: '文件已在处理中或状态不正确' },
+        { status: 409 }  // Conflict status
+      );
+    }
+
     try {
       // 5. Load file from disk
-      const fullPath = storage.getFullPath(artifact.filePath);
+      const fullPath = await storage.getFullPath(artifact.filePath);
       const parseResult = await parser.parseFromPath(fullPath);
 
       // 6. Extract items using InsightsExtractor
