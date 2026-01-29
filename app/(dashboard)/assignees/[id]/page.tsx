@@ -14,6 +14,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   LinearProgress,
   Alert,
@@ -25,11 +26,19 @@ import {
   TableRow,
   Chip,
   Snackbar,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   UploadFile as UploadFileIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
+  PlaylistAdd as AddToTodoIcon,
+  AutoAwesome as InsightIcon,
 } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
 
@@ -42,13 +51,23 @@ interface Task {
   createdAt: string;
 }
 
+interface ConfirmedItem {
+  id: string;
+  dimension: string;
+  content: string;
+  sourceText: string | null;
+  createdAt: string;
+}
+
 interface Assignee {
   id: string;
   name: string;
   feishuUserId: string | null;
   tasks: Task[];
+  confirmedItems: ConfirmedItem[];
   _count: {
     tasks: number;
+    confirmedItems: number;
   };
 }
 
@@ -72,6 +91,26 @@ const STATUS_COLORS: Record<TaskStatus, 'default' | 'primary' | 'success' | 'err
   POSTPONED: 'warning',
 };
 
+const DIMENSION_LABELS: Record<string, string> = {
+  focus: '当前关注',
+  goal: '目标',
+  obstacle: '障碍',
+  decision: '决策',
+  risk: '风险',
+  action: '行动',
+};
+
+const DIMENSION_COLORS: Record<string, 'default' | 'primary' | 'secondary' | 'success' | 'error' | 'warning' | 'info'> = {
+  focus: 'primary',
+  goal: 'success',
+  obstacle: 'error',
+  decision: 'info',
+  risk: 'warning',
+  action: 'secondary',
+};
+
+const DIMENSION_ORDER = ['focus', 'goal', 'obstacle', 'decision', 'risk', 'action'];
+
 function UploadDialog({
   assigneeId,
   open,
@@ -86,6 +125,52 @@ function UploadDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const allowedTypes = ['.txt', '.pdf', '.docx'];
+  const allowedMimeTypes = [
+    'text/plain',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ];
+
+  const validateFile = (file: File): boolean => {
+    const extension = '.' + file.name.split('.').pop()?.toLowerCase();
+    return allowedTypes.includes(extension) || allowedMimeTypes.includes(file.type);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!loading) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (loading) return;
+
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile && validateFile(droppedFile)) {
+      setFile(droppedFile);
+      setError(null);
+    } else {
+      setError('不支持的文件格式，请上传 .txt, .pdf 或 .docx 文件');
+    }
+  };
 
   const handleUpload = async () => {
     if (!file) return;
@@ -145,6 +230,7 @@ function UploadDialog({
       setFile(null);
       setError(null);
       setProgress(0);
+      setIsDragging(false);
       onClose();
     }
   };
@@ -159,23 +245,74 @@ function UploadDialog({
           </Alert>
         )}
 
-        <Box sx={{ mt: 2 }}>
+        <Box
+          sx={{
+            mt: 2,
+            p: 4,
+            border: '2px dashed',
+            borderColor: isDragging ? 'primary.main' : file ? 'success.main' : 'grey.300',
+            borderRadius: 2,
+            bgcolor: isDragging ? 'primary.50' : file ? 'success.50' : 'grey.50',
+            textAlign: 'center',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              borderColor: loading ? 'grey.300' : 'primary.main',
+              bgcolor: loading ? 'grey.50' : 'primary.50',
+            },
+          }}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onClick={() => {
+            if (!loading) {
+              document.getElementById('file-upload-input')?.click();
+            }
+          }}
+        >
           <input
+            id="file-upload-input"
             type="file"
             accept=".txt,.pdf,.docx"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              const selectedFile = e.target.files?.[0];
+              if (selectedFile && validateFile(selectedFile)) {
+                setFile(selectedFile);
+                setError(null);
+              } else if (selectedFile) {
+                setError('不支持的文件格式');
+              }
+            }}
             disabled={loading}
-            style={{ width: '100%' }}
+            style={{ display: 'none' }}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            支持的格式: .txt, .pdf, .docx
-          </Typography>
+          <UploadFileIcon sx={{ fontSize: 48, color: isDragging ? 'primary.main' : file ? 'success.main' : 'grey.400', mb: 1 }} />
+          {file ? (
+            <>
+              <Typography variant="body1" color="success.main" fontWeight={500}>
+                {file.name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                点击或拖拽更换文件
+              </Typography>
+            </>
+          ) : (
+            <>
+              <Typography variant="body1" color={isDragging ? 'primary.main' : 'text.primary'}>
+                {isDragging ? '松开以上传文件' : '拖拽文件到此处，或点击选择'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                支持的格式: .txt, .pdf, .docx
+              </Typography>
+            </>
+          )}
         </Box>
 
         {loading && (
           <Box sx={{ mt: 2 }}>
             <LinearProgress variant="determinate" value={progress} />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               {progress < 40 ? '上传中...' : progress < 80 ? '提取中...' : '处理完成'}
             </Typography>
           </Box>
@@ -209,6 +346,37 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
     message: string;
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
+
+  // 洞察编辑和删除状态
+  const [editDialog, setEditDialog] = useState<{
+    open: boolean;
+    item: ConfirmedItem | null;
+    content: string;
+  }>({ open: false, item: null, content: '' });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    itemId: string | null;
+  }>({ open: false, itemId: null });
+
+  // 转为待办对话框状态
+  const [todoDialog, setTodoDialog] = useState<{
+    open: boolean;
+    item: ConfirmedItem | null;
+    title: string;
+    dod: string;
+    selectedAssigneeId: string;
+    dueDate: string;
+  }>({ open: false, item: null, title: '', dod: '', selectedAssigneeId: '', dueDate: '' });
+
+  // 所有负责人列表（用于选择）
+  const [allAssignees, setAllAssignees] = useState<{ id: string; name: string }[]>([]);
+
+  // 周会议题对话框状态
+  const [weeklyTopicsDialog, setWeeklyTopicsDialog] = useState<{
+    open: boolean;
+    loading: boolean;
+    content: string;
+  }>({ open: false, loading: false, content: '' });
 
   useEffect(() => {
     const loadParams = async () => {
@@ -251,6 +419,18 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
     }
   };
 
+  const loadAllAssignees = async () => {
+    try {
+      const res = await fetch('/api/assignees', { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAllAssignees(data.data.map((a: { id: string; name: string }) => ({ id: a.id, name: a.name })));
+      }
+    } catch (error) {
+      console.error('加载负责人列表失败:', error);
+    }
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
@@ -261,6 +441,187 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  // 洞察编辑处理
+  const handleEditClick = (item: ConfirmedItem) => {
+    setEditDialog({ open: true, item, content: item.content });
+  };
+
+  const handleEditSave = async () => {
+    if (!editDialog.item) return;
+
+    try {
+      const res = await fetch(`/api/insights/confirmed/${editDialog.item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ content: editDialog.content }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // 更新本地状态
+        if (assignee) {
+          setAssignee({
+            ...assignee,
+            confirmedItems: assignee.confirmedItems.map((item) =>
+              item.id === editDialog.item!.id
+                ? { ...item, content: editDialog.content }
+                : item
+            ),
+          });
+        }
+        setSnackbar({ open: true, message: '更新成功', severity: 'success' });
+        setEditDialog({ open: false, item: null, content: '' });
+      } else {
+        setSnackbar({ open: true, message: data.error || '更新失败', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('更新失败:', error);
+      setSnackbar({ open: true, message: '更新失败', severity: 'error' });
+    }
+  };
+
+  // 洞察删除处理
+  const handleDeleteClick = (itemId: string) => {
+    setDeleteDialog({ open: true, itemId });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.itemId) return;
+
+    try {
+      const res = await fetch(`/api/insights/confirmed/${deleteDialog.itemId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // 更新本地状态
+        if (assignee) {
+          setAssignee({
+            ...assignee,
+            confirmedItems: assignee.confirmedItems.filter(
+              (item) => item.id !== deleteDialog.itemId
+            ),
+            _count: {
+              ...assignee._count,
+              confirmedItems: assignee._count.confirmedItems - 1,
+            },
+          });
+        }
+        setSnackbar({ open: true, message: '删除成功', severity: 'success' });
+        setDeleteDialog({ open: false, itemId: null });
+      } else {
+        setSnackbar({ open: true, message: data.error || '删除失败', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('删除失败:', error);
+      setSnackbar({ open: true, message: '删除失败', severity: 'error' });
+    }
+  };
+
+  // 打开转为待办对话框
+  const handleConvertToTodo = async (item: ConfirmedItem) => {
+    // 加载所有负责人列表
+    await loadAllAssignees();
+    setTodoDialog({
+      open: true,
+      item,
+      title: item.content,
+      dod: '',
+      selectedAssigneeId: assigneeId, // 默认当前负责人
+      dueDate: '',
+    });
+  };
+
+  // 确认转为待办
+  const handleConfirmConvertToTodo = async () => {
+    if (!todoDialog.item || !todoDialog.title.trim()) return;
+
+    try {
+      // 1. 创建任务
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: todoDialog.title.trim(),
+          dod: todoDialog.dod.trim() || null,
+          assigneeId: todoDialog.selectedAssigneeId || null,
+          dueDate: todoDialog.dueDate || null,
+          status: 'TODO',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setSnackbar({ open: true, message: data.error || '添加失败', severity: 'error' });
+        return;
+      }
+
+      // 2. 删除行动项
+      const deleteRes = await fetch(`/api/insights/confirmed/${todoDialog.item.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      // 3. 更新本地状态
+      if (assignee) {
+        const isCurrentAssignee = todoDialog.selectedAssigneeId === assigneeId;
+        setAssignee({
+          ...assignee,
+          // 只有当选择的负责人是当前负责人时才添加到任务列表
+          tasks: isCurrentAssignee ? [data.data, ...assignee.tasks] : assignee.tasks,
+          confirmedItems: assignee.confirmedItems.filter(
+            (item) => item.id !== todoDialog.item!.id
+          ),
+          _count: {
+            ...assignee._count,
+            tasks: isCurrentAssignee ? assignee._count.tasks + 1 : assignee._count.tasks,
+            confirmedItems: assignee._count.confirmedItems - 1,
+          },
+        });
+      }
+
+      setSnackbar({ open: true, message: '已添加到待办列表', severity: 'success' });
+      setTodoDialog({ open: false, item: null, title: '', dod: '', selectedAssigneeId: '', dueDate: '' });
+    } catch (error) {
+      console.error('添加待办失败:', error);
+      setSnackbar({ open: true, message: '添加失败', severity: 'error' });
+    }
+  };
+
+  // 生成周会议题
+  const handleGenerateWeeklyTopics = async () => {
+    setWeeklyTopicsDialog({ open: true, loading: true, content: '' });
+
+    try {
+      const res = await fetch('/api/insights/weekly-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ assigneeId }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setWeeklyTopicsDialog({ open: true, loading: false, content: data.data.content });
+      } else {
+        setSnackbar({ open: true, message: data.error || '生成失败', severity: 'error' });
+        setWeeklyTopicsDialog({ open: false, loading: false, content: '' });
+      }
+    } catch (error) {
+      console.error('生成周会议题失败:', error);
+      setSnackbar({ open: true, message: '生成失败', severity: 'error' });
+      setWeeklyTopicsDialog({ open: false, loading: false, content: '' });
+    }
   };
 
   if (loading) {
@@ -298,6 +659,9 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
             )}
             <Typography variant="body2" color="text.secondary">
               任务数: <strong>{assignee._count.tasks}</strong>
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              洞察数: <strong>{assignee._count.confirmedItems}</strong>
             </Typography>
           </Box>
         </Box>
@@ -371,12 +735,310 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
         )}
       </Paper>
 
+      {/* Confirmed Items (Insights) - Grouped by Dimension */}
+      <Paper sx={{ mt: 3 }}>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">对话洞察</Typography>
+          {assignee.confirmedItems.length > 0 && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<InsightIcon />}
+              onClick={handleGenerateWeeklyTopics}
+              disabled={weeklyTopicsDialog.loading}
+            >
+              {weeklyTopicsDialog.loading ? '生成中...' : '生成周会议题'}
+            </Button>
+          )}
+        </Box>
+        {assignee.confirmedItems.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              暂无洞察，点击"上传对话"按钮添加
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ p: 2 }}>
+            {DIMENSION_ORDER.map((dimension) => {
+              const dimensionItems = assignee.confirmedItems.filter(
+                (item) => item.dimension === dimension
+              );
+              if (dimensionItems.length === 0) return null;
+
+              return (
+                <Box key={dimension} sx={{ mb: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                    <Chip
+                      label={DIMENSION_LABELS[dimension] || dimension}
+                      color={DIMENSION_COLORS[dimension] || 'default'}
+                      size="small"
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      {dimensionItems.length} 条
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    {dimensionItems.map((item) => (
+                      <Paper
+                        key={item.id}
+                        variant="outlined"
+                        sx={{ p: 2, bgcolor: 'grey.50' }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="body2">{item.content}</Typography>
+                            {item.sourceText && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                来源: {item.sourceText.length > 100 ? item.sourceText.substring(0, 100) + '...' : item.sourceText}
+                              </Typography>
+                            )}
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                              {formatDate(item.createdAt)}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ ml: 1, display: 'flex', flexShrink: 0 }}>
+                            {dimension === 'action' && (
+                              <IconButton
+                                size="small"
+                                onClick={() => handleConvertToTodo(item)}
+                                color="success"
+                                title="转为待办"
+                              >
+                                <AddToTodoIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditClick(item)}
+                              color="primary"
+                              title="编辑"
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteClick(item.id)}
+                              color="error"
+                              title="删除"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      </Paper>
+                    ))}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Paper>
+
       {/* Upload Dialog */}
       <UploadDialog
         assigneeId={assignee.id}
         open={uploadDialogOpen}
         onClose={() => setUploadDialogOpen(false)}
       />
+
+      {/* Edit Insight Dialog */}
+      <Dialog
+        open={editDialog.open}
+        onClose={() => setEditDialog({ open: false, item: null, content: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>编辑洞察</DialogTitle>
+        <DialogContent>
+          {editDialog.item && (
+            <Box sx={{ mt: 1 }}>
+              <Chip
+                label={DIMENSION_LABELS[editDialog.item.dimension] || editDialog.item.dimension}
+                color={DIMENSION_COLORS[editDialog.item.dimension] || 'default'}
+                size="small"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                multiline
+                minRows={3}
+                value={editDialog.content}
+                onChange={(e) => setEditDialog({ ...editDialog, content: e.target.value })}
+                placeholder="输入洞察内容"
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialog({ open: false, item: null, content: '' })}>
+            取消
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleEditSave}
+            disabled={!editDialog.content.trim()}
+          >
+            保存
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Insight Dialog */}
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, itemId: null })}
+      >
+        <DialogTitle>确认删除</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除这条洞察吗？此操作无法撤销。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog({ open: false, itemId: null })}>
+            取消
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            删除
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Convert to Todo Dialog */}
+      <Dialog
+        open={todoDialog.open}
+        onClose={() => setTodoDialog({ open: false, item: null, title: '', dod: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>转为待办</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="任务标题"
+              fullWidth
+              value={todoDialog.title}
+              onChange={(e) => setTodoDialog({ ...todoDialog, title: e.target.value })}
+              placeholder="输入任务标题"
+              required
+            />
+            <TextField
+              label="完成标准 (DOD)"
+              fullWidth
+              multiline
+              minRows={2}
+              value={todoDialog.dod}
+              onChange={(e) => setTodoDialog({ ...todoDialog, dod: e.target.value })}
+              placeholder="可选：描述任务完成的标准"
+            />
+            <FormControl fullWidth>
+              <InputLabel>负责人</InputLabel>
+              <Select
+                value={todoDialog.selectedAssigneeId}
+                label="负责人"
+                onChange={(e) => setTodoDialog({ ...todoDialog, selectedAssigneeId: e.target.value })}
+              >
+                {allAssignees.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>
+                    {a.name}
+                    {a.id === assigneeId && ' (当前)'}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="截止时间"
+              type="datetime-local"
+              fullWidth
+              value={todoDialog.dueDate}
+              onChange={(e) => setTodoDialog({ ...todoDialog, dueDate: e.target.value })}
+              slotProps={{
+                inputLabel: { shrink: true },
+              }}
+            />
+            {todoDialog.item?.sourceText && (
+              <Box sx={{ p: 1.5, bgcolor: 'grey.100', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  来源: {todoDialog.item.sourceText.length > 150
+                    ? todoDialog.item.sourceText.substring(0, 150) + '...'
+                    : todoDialog.item.sourceText}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTodoDialog({ open: false, item: null, title: '', dod: '', selectedAssigneeId: '', dueDate: '' })}>
+            取消
+          </Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleConfirmConvertToTodo}
+            disabled={!todoDialog.title.trim()}
+          >
+            确认添加
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Weekly Topics Dialog */}
+      <Dialog
+        open={weeklyTopicsDialog.open}
+        onClose={() => setWeeklyTopicsDialog({ open: false, loading: false, content: '' })}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <InsightIcon color="primary" />
+            周会议题 - {assignee?.name}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {weeklyTopicsDialog.loading ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <LinearProgress sx={{ mb: 2 }} />
+              <Typography color="text.secondary">
+                正在分析洞察和任务，生成周会议题...
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ mt: 1 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  bgcolor: 'grey.50',
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'inherit',
+                  fontSize: '0.95rem',
+                  lineHeight: 1.8,
+                }}
+              >
+                {weeklyTopicsDialog.content}
+              </Paper>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              navigator.clipboard.writeText(weeklyTopicsDialog.content);
+              setSnackbar({ open: true, message: '已复制到剪贴板', severity: 'success' });
+            }}
+            disabled={weeklyTopicsDialog.loading || !weeklyTopicsDialog.content}
+          >
+            复制内容
+          </Button>
+          <Button
+            onClick={() => setWeeklyTopicsDialog({ open: false, loading: false, content: '' })}
+          >
+            关闭
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar for notifications */}
       <Snackbar

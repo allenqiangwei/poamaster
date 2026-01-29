@@ -2,18 +2,14 @@
 
 set -e  # 遇到错误立即退出
 
-echo "================================"
-echo "POA Master 自动部署脚本"
-echo "================================"
-echo ""
-
-# 颜色定义
+# 颜色定义（必须在使用前定义）
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 打印函数
+# 打印函数（必须在使用前定义）
 print_success() {
     echo -e "${GREEN}✓ $1${NC}"
 }
@@ -30,6 +26,222 @@ print_info() {
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
+
+# 环境变量
+# PRODUCTION=true  - 生产环境模式（最严格）
+# ALLOW_DB_PUSH=true - 允许执行 prisma db push（危险操作）
+# BACKUP_ONLY=true - 仅备份数据库，不启动服务
+# RESTORE_BACKUP=<文件路径> - 从备份文件还原数据库
+PRODUCTION=${PRODUCTION:-false}
+ALLOW_DB_PUSH=${ALLOW_DB_PUSH:-false}
+BACKUP_ONLY=${BACKUP_ONLY:-false}
+RESTORE_BACKUP=${RESTORE_BACKUP:-}
+
+# 备份目录
+BACKUP_DIR="./backups"
+mkdir -p "$BACKUP_DIR"
+
+# 从 DATABASE_URL 解析数据库连接信息
+parse_database_url() {
+    # DATABASE_URL 格式: postgresql://user:password@host:port/database
+    local url="$1"
+
+    # 移除 postgresql:// 前缀
+    url="${url#postgresql://}"
+
+    # 解析用户名和密码
+    local userpass="${url%%@*}"
+    DB_USER="${userpass%%:*}"
+    DB_PASS="${userpass#*:}"
+
+    # 解析主机、端口和数据库名
+    local hostportdb="${url#*@}"
+    local hostport="${hostportdb%%/*}"
+    DB_NAME="${hostportdb#*/}"
+    DB_NAME="${DB_NAME%%\?*}"  # 移除查询参数
+
+    DB_HOST="${hostport%%:*}"
+    DB_PORT="${hostport#*:}"
+
+    # 如果没有端口，默认 5432
+    if [ "$DB_PORT" = "$DB_HOST" ]; then
+        DB_PORT="5432"
+    fi
+}
+
+# 备份数据库函数
+backup_database() {
+    local backup_file="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql"
+
+    echo ""
+    print_info "正在备份数据库到: $backup_file"
+
+    # 解析数据库连接信息
+    source .env 2>/dev/null || true
+    parse_database_url "$DATABASE_URL"
+
+    # 使用 pg_dump 备份
+    PGPASSWORD="$DB_PASS" pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -F p -f "$backup_file" 2>/dev/null
+
+    if [ $? -eq 0 ] && [ -f "$backup_file" ]; then
+        local size=$(du -h "$backup_file" | cut -f1)
+        print_success "数据库备份完成: $backup_file ($size)"
+        echo "$backup_file"
+        return 0
+    else
+        print_error "数据库备份失败"
+        return 1
+    fi
+}
+
+# 还原数据库函数
+restore_database() {
+    local backup_file="$1"
+
+    if [ ! -f "$backup_file" ]; then
+        print_error "备份文件不存在: $backup_file"
+        return 1
+    fi
+
+    echo ""
+    print_info "正在从备份还原数据库: $backup_file"
+
+    # 解析数据库连接信息
+    source .env 2>/dev/null || true
+    parse_database_url "$DATABASE_URL"
+
+    # 使用 psql 还原
+    PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$backup_file" 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        print_success "数据库还原完成"
+        return 0
+    else
+        print_error "数据库还原失败"
+        return 1
+    fi
+}
+
+# 列出可用备份
+list_backups() {
+    echo ""
+    echo "可用的备份文件："
+    echo "----------------------------"
+    if [ -d "$BACKUP_DIR" ] && [ "$(ls -A $BACKUP_DIR 2>/dev/null)" ]; then
+        ls -lh "$BACKUP_DIR"/*.sql 2>/dev/null | awk '{print "  " $9 " (" $5 ", " $6 " " $7 " " $8 ")"}'
+    else
+        echo "  (没有备份文件)"
+    fi
+    echo ""
+}
+
+echo "================================"
+echo "POA Master 自动部署脚本"
+echo "================================"
+echo ""
+
+# 显示当前环境
+if [ "$PRODUCTION" = "true" ]; then
+    echo -e "${RED}┌─────────────────────────────────┐${NC}"
+    echo -e "${RED}│  🔴 生产环境模式 (PRODUCTION)   │${NC}"
+    echo -e "${RED}│  数据库操作将受到严格保护       │${NC}"
+    echo -e "${RED}└─────────────────────────────────┘${NC}"
+else
+    echo -e "${GREEN}┌─────────────────────────────────┐${NC}"
+    echo -e "${GREEN}│  🟢 开发环境模式 (DEVELOPMENT)  │${NC}"
+    echo -e "${GREEN}│  数据库操作同样受到保护         │${NC}"
+    echo -e "${GREEN}└─────────────────────────────────┘${NC}"
+fi
+echo ""
+echo "启动选项说明："
+echo "  ./start.sh                              # 安全模式（默认）"
+echo "  PRODUCTION=true ./start.sh              # 生产环境"
+echo "  ALLOW_DB_PUSH=true ./start.sh           # 允许 db push（自动备份）"
+echo "  BACKUP_ONLY=true ./start.sh             # 仅备份数据库"
+echo "  RESTORE_BACKUP=<文件> ./start.sh        # 从备份还原"
+echo "  RESTORE_BACKUP=latest ./start.sh        # 从最新备份还原"
+echo ""
+
+# 如果只是备份数据库
+if [ "$BACKUP_ONLY" = "true" ]; then
+    echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║           💾  数据库备份模式  💾                        ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # 检查 .env 文件
+    if [ ! -f .env ]; then
+        print_error ".env 文件不存在，无法备份数据库"
+        exit 1
+    fi
+
+    # 列出现有备份
+    list_backups
+
+    # 执行备份
+    BACKUP_FILE=$(backup_database)
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo -e "${GREEN}还原命令:${NC}"
+        echo -e "${GREEN}  RESTORE_BACKUP=$BACKUP_FILE ./start.sh${NC}"
+        echo ""
+        list_backups
+    fi
+    exit 0
+fi
+
+# 如果指定了还原备份，先执行还原
+if [ -n "$RESTORE_BACKUP" ]; then
+    echo -e "${YELLOW}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║           📦  数据库还原模式  📦                        ║${NC}"
+    echo -e "${YELLOW}╚════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # 检查 .env 文件
+    if [ ! -f .env ]; then
+        print_error ".env 文件不存在，无法还原数据库"
+        exit 1
+    fi
+
+    # 列出可用备份
+    list_backups
+
+    # 检查指定的备份文件
+    if [ "$RESTORE_BACKUP" = "latest" ]; then
+        # 获取最新的备份文件
+        RESTORE_BACKUP=$(ls -t "$BACKUP_DIR"/*.sql 2>/dev/null | head -1)
+        if [ -z "$RESTORE_BACKUP" ]; then
+            print_error "没有找到备份文件"
+            exit 1
+        fi
+        print_info "使用最新备份: $RESTORE_BACKUP"
+    fi
+
+    if [ ! -f "$RESTORE_BACKUP" ]; then
+        print_error "备份文件不存在: $RESTORE_BACKUP"
+        echo ""
+        echo "用法示例："
+        echo "  RESTORE_BACKUP=./backups/backup_20240101_120000.sql ./start.sh"
+        echo "  RESTORE_BACKUP=latest ./start.sh  # 使用最新备份"
+        exit 1
+    fi
+
+    echo -e "${RED}警告：还原操作将覆盖当前数据库中的所有数据！${NC}"
+    read -p "确定要从备份还原吗？[y/N]: " CONFIRM_RESTORE
+    if [ "$CONFIRM_RESTORE" = "y" ] || [ "$CONFIRM_RESTORE" = "Y" ]; then
+        restore_database "$RESTORE_BACKUP"
+        if [ $? -eq 0 ]; then
+            print_success "数据库已还原，继续启动服务..."
+        else
+            print_error "还原失败，退出"
+            exit 1
+        fi
+    else
+        print_info "已取消还原"
+        exit 0
+    fi
+    echo ""
+fi
 
 # 步骤 1: 检查环境要求
 echo "步骤 1/7: 检查环境要求..."
@@ -119,13 +331,88 @@ print_info "生成 Prisma Client..."
 npx prisma generate
 print_success "Prisma Client 生成完成"
 
-print_info "运行数据库迁移..."
+# 数据库迁移（所有环境默认使用安全的 migrate deploy）
+print_info "运行数据库迁移 (prisma migrate deploy)..."
+
 if npx prisma migrate deploy 2>/dev/null; then
     print_success "数据库迁移完成"
 else
-    print_info "迁移失败，尝试推送 Schema..."
-    npx prisma db push
-    print_success "数据库 Schema 推送完成"
+    # 迁移失败，检查是否允许 db push
+    echo ""
+    echo -e "${YELLOW}╔════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║           ⚠️  数据库迁移失败  ⚠️                        ║${NC}"
+    echo -e "${YELLOW}╠════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${YELLOW}║  可能原因：没有迁移文件或迁移文件与数据库不匹配         ║${NC}"
+    echo -e "${YELLOW}╚════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    if [ "$PRODUCTION" = "true" ]; then
+        # 生产环境：绝对不允许 db push
+        print_error "生产环境不允许执行 prisma db push"
+        echo ""
+        echo "解决方法："
+        echo "  1. 在开发环境创建迁移: npx prisma migrate dev --name <名称>"
+        echo "  2. 将迁移文件提交到 git"
+        echo "  3. 重新部署到生产环境"
+        exit 1
+
+    elif [ "$ALLOW_DB_PUSH" = "true" ]; then
+        # 明确允许 db push
+        echo -e "${RED}╔════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║           ⚠️  危险操作：prisma db push  ⚠️              ║${NC}"
+        echo -e "${RED}╠════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${RED}║  此操作可能导致数据丢失！                               ║${NC}"
+        echo -e "${RED}║  你已通过 ALLOW_DB_PUSH=true 明确允许此操作             ║${NC}"
+        echo -e "${RED}╚════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        # 自动备份数据库
+        print_info "在执行 db push 之前，先备份当前数据库..."
+        BACKUP_FILE=$(backup_database)
+        BACKUP_SUCCESS=$?
+
+        if [ $BACKUP_SUCCESS -eq 0 ]; then
+            echo ""
+            echo -e "${GREEN}备份已创建: $BACKUP_FILE${NC}"
+            echo -e "${GREEN}如果需要还原，请运行:${NC}"
+            echo -e "${GREEN}  RESTORE_BACKUP=$BACKUP_FILE ./start.sh${NC}"
+            echo ""
+        else
+            echo ""
+            echo -e "${YELLOW}备份失败（可能是新数据库或 pg_dump 未安装）${NC}"
+            echo ""
+        fi
+
+        read -p "最后确认：确定要执行 db push 吗？[y/N]: " CONFIRM_PUSH
+        if [ "$CONFIRM_PUSH" = "y" ] || [ "$CONFIRM_PUSH" = "Y" ]; then
+            npx prisma db push
+            print_success "数据库 Schema 推送完成"
+            echo ""
+            if [ $BACKUP_SUCCESS -eq 0 ]; then
+                echo -e "${GREEN}提示：如果出现问题，可以使用以下命令还原:${NC}"
+                echo -e "${GREEN}  RESTORE_BACKUP=$BACKUP_FILE ./start.sh${NC}"
+            fi
+        else
+            print_info "已取消 db push"
+            exit 1
+        fi
+
+    else
+        # 开发环境但未允许 db push：提供安全选项
+        print_info "为保护数据安全，默认不执行 prisma db push"
+        echo ""
+        echo "你有以下选择："
+        echo ""
+        echo "  选项 1（推荐）- 创建迁移文件："
+        echo "    npx prisma migrate dev --name init"
+        echo "    这会创建迁移文件，可以安全地应用到其他环境"
+        echo ""
+        echo "  选项 2（危险）- 强制推送 Schema："
+        echo "    ALLOW_DB_PUSH=true ./start.sh"
+        echo "    这可能会导致数据丢失，仅限全新数据库使用"
+        echo ""
+        exit 1
+    fi
 fi
 
 echo ""

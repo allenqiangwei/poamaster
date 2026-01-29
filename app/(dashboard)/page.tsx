@@ -40,7 +40,7 @@ export default function HomePage() {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <TodoIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
               <Typography variant="h5">
-                To-Do List
+                待办事项
               </Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">

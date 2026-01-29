@@ -2,8 +2,8 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import ReviewPage from './ReviewPage';
 
-export default async function Page({ params }: { params: { artifactId: string } }) {
-  const { artifactId } = params;
+export default async function Page({ params }: { params: Promise<{ artifactId: string }> }) {
+  const { artifactId } = await params;
 
   // Fetch artifact with draft items and assignee
   const artifact = await prisma.artifact.findUnique({

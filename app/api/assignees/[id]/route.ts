@@ -31,7 +31,7 @@ export async function GET(
 
     const { id } = await params;
 
-    // 获取负责人详情，包括关联的任务
+    // 获取负责人详情，包括关联的任务和入库信息
     const assignee = await prisma.assignee.findUnique({
       where: { id },
       include: {
@@ -40,8 +40,13 @@ export async function GET(
             createdAt: 'desc',
           },
         },
+        confirmedItems: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
         _count: {
-          select: { tasks: true },
+          select: { tasks: true, confirmedItems: true },
         },
       },
     });

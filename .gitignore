@@ -37,8 +37,11 @@
 # next.js
 # Next.js
 # OS
-# Prisma
+# Prisma (migrations should be committed, not ignored)
 # production
+
+# Database backups (contain sensitive data)
+backups/
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 # testing
 # Testing
@@ -51,7 +54,8 @@ next-env.d.ts
 node_modules/
 npm-debug.log*
 out/
-prisma/migrations/
+# prisma/migrations/ - 迁移文件应该提交到 git，不要忽略！
 Thumbs.db
 yarn-debug.log*
 yarn-error.log*
+uploads/

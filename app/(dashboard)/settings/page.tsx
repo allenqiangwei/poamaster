@@ -101,7 +101,7 @@ export default function SettingsPage() {
           OpenAI 配置
         </Typography>
         <TextField
-          label="API Key"
+          label="API 密钥"
           fullWidth
           margin="normal"
           type="password"
@@ -119,7 +119,7 @@ export default function SettingsPage() {
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField
-            label="App ID"
+            label="应用 ID"
             fullWidth
             value={configs['feishu.appId']}
             onChange={(e) =>
@@ -127,7 +127,7 @@ export default function SettingsPage() {
             }
           />
           <TextField
-            label="App Secret"
+            label="应用密钥"
             fullWidth
             type="password"
             value={configs['feishu.appSecret']}
