@@ -22,6 +22,23 @@ export class InsightsExtractor {
    * 从文本中提取 insights
    */
   async extract(text: string): Promise<ExtractionResult> {
+    // Add validation at the start
+    if (typeof text !== 'string') {
+      throw new Error('输入文本不能为空');
+    }
+
+    if (text.trim().length === 0) {
+      // Return empty result for empty text
+      return {
+        items: [],
+        metadata: {
+          strategy: 'single',
+          modelName: EXTRACTION_CONFIG.MODEL_NAME,
+          latencyMs: 0,
+        },
+      };
+    }
+
     const startTime = Date.now();
     const isShortText = text.length < EXTRACTION_CONFIG.SHORT_TEXT_THRESHOLD;
 
@@ -67,8 +84,25 @@ export class InsightsExtractor {
         throw new Error('OpenAI 返回了空响应');
       }
 
-      // 解析 JSON 响应
-      const parsed = JSON.parse(content);
+      // Add validation before parsing
+      let parsed: any;
+      try {
+        parsed = JSON.parse(content);
+      } catch (parseError) {
+        throw new Error(`无法解析 LLM 响应: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
+
+      // Validate that parsed is an object
+      if (typeof parsed !== 'object' || parsed === null) {
+        throw new Error('LLM 响应格式不正确: 期望对象类型');
+      }
+
+      // Validate expected structure (has at least one dimension key)
+      const validDimensions = Object.values(DIMENSIONS);
+      const hasDimensionKey = validDimensions.some(dim => dim in parsed);
+      if (!hasDimensionKey) {
+        throw new Error(`LLM 响应缺少维度字段,期望至少包含以下维度之一: ${validDimensions.join(', ')}`);
+      }
 
       // 转换为 DraftItemData[] 格式
       return this.convertToItems(parsed);
@@ -257,6 +291,7 @@ export class InsightsExtractor {
    * 按维度分组
    */
   private groupByDimension(items: DraftItemData[]): Record<Dimension, DraftItemData[]> {
+    const validDimensions = Object.values(DIMENSIONS);
     const groups: Record<string, DraftItemData[]> = {};
 
     for (const dimension of Object.values(DIMENSIONS)) {
@@ -264,6 +299,12 @@ export class InsightsExtractor {
     }
 
     for (const item of items) {
+      // Validate dimension before grouping
+      if (!validDimensions.includes(item.dimension)) {
+        console.warn(`跳过无效维度: ${item.dimension}`);
+        continue;
+      }
+
       if (groups[item.dimension]) {
         groups[item.dimension].push(item);
       }

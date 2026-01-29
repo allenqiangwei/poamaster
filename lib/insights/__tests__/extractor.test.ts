@@ -100,9 +100,172 @@ async function testTextChunking() {
   console.log('\n✅ 文本分块测试完成');
 }
 
+async function testInputValidation() {
+  console.log('\n=== 测试输入验证 (Critical Issue 1) ===');
+
+  const extractor = new InsightsExtractor();
+
+  // Test 1: Empty string
+  try {
+    const result = await extractor.extract('');
+    console.log('空字符串测试: 返回空结果 ✅');
+    console.log('  条目数:', result.items.length);
+    console.log('  策略:', result.metadata.strategy);
+    console.log('  耗时:', result.metadata.latencyMs);
+
+    if (result.items.length !== 0) {
+      throw new Error('空字符串应该返回空结果');
+    }
+  } catch (error) {
+    console.error('❌ 空字符串测试失败:', error);
+    throw error;
+  }
+
+  // Test 2: Whitespace only
+  try {
+    const result = await extractor.extract('   \n\t  ');
+    console.log('纯空白字符测试: 返回空结果 ✅');
+    console.log('  条目数:', result.items.length);
+
+    if (result.items.length !== 0) {
+      throw new Error('纯空白字符应该返回空结果');
+    }
+  } catch (error) {
+    console.error('❌ 纯空白字符测试失败:', error);
+    throw error;
+  }
+
+  // Test 3: Null/undefined (should throw)
+  try {
+    await extractor.extract(null as any);
+    console.error('❌ null 应该抛出错误');
+    throw new Error('null 应该抛出错误');
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('输入文本不能为空')) {
+      console.log('null 测试: 正确抛出错误 ✅');
+    } else {
+      throw error;
+    }
+  }
+
+  console.log('\n✅ 输入验证测试完成');
+}
+
+async function testJSONValidation() {
+  console.log('\n=== 测试 JSON 响应验证 (Critical Issue 2) ===');
+
+  const extractor = new InsightsExtractor();
+
+  // Access private method for testing
+  const convertToItems = (extractor as any).convertToItems.bind(extractor);
+
+  // Test 1: Valid structure
+  try {
+    const validParsed = {
+      focus: [{ content: '测试关注点', evidence: '测试证据' }],
+      goal: [],
+      obstacle: [],
+      decision: [],
+      risk: [],
+      action: [],
+    };
+    const items = convertToItems(validParsed);
+    console.log('有效结构测试: 转换成功 ✅');
+    console.log('  转换条目数:', items.length);
+
+    if (items.length !== 1) {
+      throw new Error('应该转换出1个条目');
+    }
+  } catch (error) {
+    console.error('❌ 有效结构测试失败:', error);
+    throw error;
+  }
+
+  // Test 2: Invalid dimension (should be filtered in groupByDimension)
+  try {
+    const invalidDimension = {
+      invalid_dimension: [{ content: '测试', evidence: '证据' }],
+    };
+    const items = convertToItems(invalidDimension);
+    console.log('无效维度测试: 返回空数组 ✅');
+    console.log('  转换条目数:', items.length);
+  } catch (error) {
+    console.error('❌ 无效维度测试失败:', error);
+    throw error;
+  }
+
+  console.log('\n✅ JSON 响应验证测试完成');
+}
+
+async function testDimensionValidation() {
+  console.log('\n=== 测试维度验证 (Critical Issue 3) ===');
+
+  const extractor = new InsightsExtractor();
+
+  // Access private method for testing
+  const groupByDimension = (extractor as any).groupByDimension.bind(extractor);
+
+  // Test with items including invalid dimension
+  const testItems = [
+    { dimension: 'focus', content: '关注点1', evidence: '证据1' },
+    { dimension: 'decision', content: '决策1' },
+    { dimension: 'invalid_dim' as any, content: '无效维度' }, // Invalid dimension
+    { dimension: 'action', content: '行动1', action: '行动1' },
+  ];
+
+  try {
+    // Capture console.warn output
+    const originalWarn = console.warn;
+    let warnCalled = false;
+    let warnMessage = '';
+
+    console.warn = (message: string) => {
+      warnCalled = true;
+      warnMessage = message;
+    };
+
+    const groups = groupByDimension(testItems);
+
+    // Restore console.warn
+    console.warn = originalWarn;
+
+    console.log('维度分组测试:');
+    console.log('  警告被调用:', warnCalled ? '✅' : '❌');
+    if (warnCalled) {
+      console.log('  警告内容:', warnMessage);
+    }
+    console.log('  focus 组:', groups.focus?.length || 0, '个条目');
+    console.log('  decision 组:', groups.decision?.length || 0, '个条目');
+    console.log('  action 组:', groups.action?.length || 0, '个条目');
+
+    const totalGroupedItems = Object.values(groups).reduce(
+      (sum: number, arr: any) => sum + arr.length,
+      0
+    );
+    console.log('  分组后总条目数:', totalGroupedItems);
+
+    // Should have 3 valid items (invalid_dim should be filtered out)
+    if (totalGroupedItems !== 3) {
+      throw new Error(`期望3个有效条目，实际得到 ${totalGroupedItems} 个`);
+    }
+
+    console.log('✅ 无效维度已被过滤');
+  } catch (error) {
+    console.error('❌ 维度验证测试失败:', error);
+    throw error;
+  }
+
+  console.log('\n✅ 维度验证测试完成');
+}
+
 // 运行测试
 async function runTests() {
   try {
+    // Critical issue fixes tests (don't need API Key)
+    await testInputValidation();
+    await testJSONValidation();
+    await testDimensionValidation();
+
     // 测试文本分块（不需要 API Key）
     await testTextChunking();
 
