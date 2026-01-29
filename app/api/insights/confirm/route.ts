@@ -137,6 +137,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Note: This is a single-user system (COO only). Session authentication
+    // is sufficient authorization - the COO has access to all assignees and artifacts.
+    // No per-assignee permission check is needed.
+
     // 4. Validate artifact status is 'ready' (extraction completed)
     if (artifact.status !== 'ready') {
       return NextResponse.json(
