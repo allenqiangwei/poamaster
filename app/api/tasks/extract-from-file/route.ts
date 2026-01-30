@@ -46,11 +46,11 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
 
       // 动态导入 pdf-parse
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
-      const textResult = await parser.getText();
-      extractedText = textResult.text;
-      await parser.destroy();
+      const pdfParse = await import('pdf-parse');
+
+      // 使用默认的 pdf-parse 函数（不使用 PDFParse 类）
+      const data = await pdfParse.default(buffer);
+      extractedText = data.text;
 
       if (!extractedText || extractedText.trim().length === 0) {
         return NextResponse.json(

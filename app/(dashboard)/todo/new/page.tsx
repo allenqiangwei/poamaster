@@ -30,6 +30,7 @@ export default function NewTaskPage() {
   const [inputMode, setInputMode] = useState<'text' | 'file'>('text');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // 监听全局粘贴事件
   useEffect(() => {
@@ -87,6 +88,48 @@ export default function NewTaskPage() {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    if (file) {
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setError('只支持 PDF、JPG、PNG 和 WEBP 格式');
+        return;
+      }
+      setSelectedFile(file);
+      setError('');
+
+      // 如果是图片，生成预览
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+      }
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!loading) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (loading) return;
+
+    const file = e.dataTransfer.files[0];
     if (file) {
       const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
       if (!validTypes.includes(file.type)) {
@@ -283,28 +326,47 @@ export default function NewTaskPage() {
               <Typography variant="h6" gutterBottom>
                 上传文件
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                 <Typography variant="body2" color="text.secondary">
                   支持 PDF、JPG、PNG、WEBP 格式
                 </Typography>
                 <Typography variant="body2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <UploadIcon fontSize="small" />
+                  拖拽上传
+                </Typography>
+                <Typography variant="body2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <ContentPasteIcon fontSize="small" />
-                  或直接 Ctrl+V 粘贴图片
+                  Ctrl+V 粘贴
                 </Typography>
               </Box>
 
               <Box
                 sx={{
                   border: '2px dashed',
-                  borderColor: selectedFile ? 'primary.main' : 'divider',
-                  borderRadius: 1,
+                  borderColor: isDragging ? 'primary.main' : selectedFile ? 'success.main' : 'grey.300',
+                  borderRadius: 2,
                   p: 4,
                   textAlign: 'center',
-                  bgcolor: 'grey.50'
+                  bgcolor: isDragging ? 'primary.50' : selectedFile ? 'success.50' : 'grey.50',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: loading ? 'grey.300' : 'primary.main',
+                    bgcolor: loading ? 'grey.50' : 'primary.50',
+                  },
+                }}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                onClick={() => {
+                  if (!loading) {
+                    document.getElementById('file-upload')?.click();
+                  }
                 }}
               >
                 {previewUrl && selectedFile?.type.startsWith('image/') ? (
-                  <Box>
+                  <Box onClick={(e) => e.stopPropagation()}>
                     <Box
                       component="img"
                       src={previewUrl}
@@ -316,8 +378,11 @@ export default function NewTaskPage() {
                         borderRadius: 1
                       }}
                     />
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       {selectedFile.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      拖拽新文件或点击背景更换
                     </Typography>
                     <Button
                       size="small"
@@ -325,7 +390,6 @@ export default function NewTaskPage() {
                         setSelectedFile(null);
                         setPreviewUrl(null);
                       }}
-                      sx={{ mt: 1 }}
                     >
                       清除
                     </Button>
@@ -338,20 +402,33 @@ export default function NewTaskPage() {
                       id="file-upload"
                       type="file"
                       onChange={handleFileChange}
+                      disabled={loading}
                     />
-                    <label htmlFor="file-upload">
-                      <Button
-                        variant="outlined"
-                        component="span"
-                        startIcon={<UploadIcon />}
-                      >
-                        选择文件
-                      </Button>
-                    </label>
-                    {selectedFile && (
-                      <Typography variant="body2" sx={{ mt: 2 }}>
-                        已选择: {selectedFile.name}
-                      </Typography>
+                    <UploadIcon
+                      sx={{
+                        fontSize: 48,
+                        color: isDragging ? 'primary.main' : selectedFile ? 'success.main' : 'grey.400',
+                        mb: 1
+                      }}
+                    />
+                    {selectedFile ? (
+                      <>
+                        <Typography variant="body1" color="success.main" fontWeight={500}>
+                          {selectedFile.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          拖拽新文件或点击更换
+                        </Typography>
+                      </>
+                    ) : (
+                      <>
+                        <Typography variant="body1" color={isDragging ? 'primary.main' : 'text.primary'}>
+                          {isDragging ? '松开以上传文件' : '拖拽文件到此处，或点击选择'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                          支持格式: PDF、JPG、PNG、WEBP
+                        </Typography>
+                      </>
                     )}
                   </>
                 )}

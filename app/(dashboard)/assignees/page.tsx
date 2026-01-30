@@ -121,7 +121,7 @@ export default function AssigneesPage() {
         : '/api/assignees';
 
       const res = await fetch(url, {
-        method: editingAssignee ? 'PUT' : 'POST',
+        method: editingAssignee ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name.trim(),
