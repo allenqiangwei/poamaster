@@ -195,3 +195,113 @@ model ConfirmedItem {
   @@index([createdAt])
   @@index([pushedToTodo])
 }
+
+// ============================================
+// Project Pulse - 项目管理模块
+// ============================================
+
+// 报告类型
+enum ReportType {
+  DAILY
+  WEEKLY
+  OTHER
+}
+
+// 解析状态
+enum ParseStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// 分析会话状态
+enum SessionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// 12 维度枚举
+enum EntryDimension {
+  OVERALL_HEALTH
+  SCHEDULE
+  SCOPE
+  RISKS
+  BLOCKERS
+  DEPENDENCIES
+  QUALITY
+  RESOURCING
+  DECISIONS
+  KPI
+  PLAN_CREDIBILITY
+  ALIGNMENT
+}
+
+// 项目
+model PulseProject {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reports   PulseReport[]
+  entries   PulseEntry[]
+
+  @@index([updatedAt])
+}
+
+// 上传的报告
+model PulseReport {
+  id          String      @id @default(cuid())
+  projectId   String
+  project     PulseProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  fileName    String
+  filePath    String
+  reportType  ReportType
+  reportDate  DateTime
+  parsedText  String?     @db.Text
+  parseStatus ParseStatus @default(PENDING)
+  parseError  String?
+
+  uploadedAt  DateTime    @default(now())
+  sessions    PulseAnalysisSession[]
+
+  @@index([projectId])
+}
+
+// 分析会话
+model PulseAnalysisSession {
+  id          String        @id @default(cuid())
+  reportId    String
+  report      PulseReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  aiOutputRaw Json
+  status      SessionStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+
+  @@index([reportId])
+}
+
+// 条目
+model PulseEntry {
+  id              String         @id @default(cuid())
+  projectId       String
+  project         PulseProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  dimension       EntryDimension
+  title           String
+  evidenceCurrent String         @db.Text
+  sourceCurrent   Json
+  evidenceHistory Json           @default("[]")
+  embedding       Float[]
+
+  deletedAt       DateTime?
+  deleteToken     String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([projectId, dimension])
+  @@index([deletedAt])
+}
