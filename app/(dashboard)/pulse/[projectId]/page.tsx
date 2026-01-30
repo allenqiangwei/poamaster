@@ -172,6 +172,7 @@ export default function ProjectDetailPage() {
       const data = await res.json();
 
       if (data.success) {
+        // Update with the complete project object from API (includes entries)
         setProject(data.data);
         setEditDialogOpen(false);
         setError(null);

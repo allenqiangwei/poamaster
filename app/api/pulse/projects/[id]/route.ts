@@ -53,7 +53,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const project = await prisma.pulseProject.update({
       where: { id },
-      data: { name: name.trim() }
+      data: { name: name.trim() },
+      include: {
+        entries: {
+          where: { deletedAt: null },
+          orderBy: { updatedAt: 'desc' }
+        }
+      }
     });
 
     return NextResponse.json({ success: true, data: project });
