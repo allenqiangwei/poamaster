@@ -1034,7 +1034,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
       {/* Convert to Todo Dialog */}
       <Dialog
         open={todoDialog.open}
-        onClose={() => setTodoDialog({ open: false, item: null, title: '', dod: '' })}
+        onClose={() => setTodoDialog({ open: false, item: null, title: '', dod: '', selectedAssigneeId: '', dueDate: '' })}
         maxWidth="sm"
         fullWidth
       >
