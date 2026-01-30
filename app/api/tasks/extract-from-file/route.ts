@@ -41,17 +41,17 @@ export async function POST(request: NextRequest) {
 
     // 根据文件类型提取文本
     if (fileType === 'application/pdf') {
-      // 处理 PDF 文件
+      // 处理 PDF 文件 - 使用 unpdf (serverless-friendly)
       const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      const buffer = new Uint8Array(arrayBuffer);
 
-      // 动态导入 pdf-parse v2.x (使用 PDFParse 类)
-      const { PDFParse } = await import('pdf-parse');
+      // 动态导入 unpdf
+      const { extractText, getDocumentProxy } = await import('unpdf');
 
-      // 创建 PDFParse 实例并提取文本
-      const parser = new PDFParse({ buffer });
-      const result = await parser.getText();
-      extractedText = result.text;
+      // 提取 PDF 文本
+      const pdf = await getDocumentProxy(buffer);
+      const { text } = await extractText(pdf, { mergePages: true });
+      extractedText = text;
 
       if (!extractedText || extractedText.trim().length === 0) {
         return NextResponse.json(

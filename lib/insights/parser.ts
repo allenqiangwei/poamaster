@@ -66,17 +66,17 @@ export class FileParser {
 
   private async parsePdf(file: File): Promise<ParseResult> {
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = new Uint8Array(arrayBuffer);
 
-    // 使用 pdf-parse v2.x (PDFParse 类)
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse({ buffer });
-    const result = await parser.getText();
+    // 使用 unpdf (serverless-friendly)
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    const pdf = await getDocumentProxy(buffer);
+    const { totalPages, text } = await extractText(pdf, { mergePages: true });
 
     return {
-      text: result.text,
-      charCount: result.text.length,
-      pageCount: result.total,
+      text,
+      charCount: text.length,
+      pageCount: totalPages,
       metadata: {
         fileType: 'pdf',
         fileName: file.name
@@ -215,14 +215,15 @@ export class FileParser {
     }
 
     if (ext === '.pdf') {
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ buffer });
-      const result = await parser.getText();
+      const { extractText, getDocumentProxy } = await import('unpdf');
+      const uint8Buffer = new Uint8Array(buffer);
+      const pdf = await getDocumentProxy(uint8Buffer);
+      const { totalPages, text } = await extractText(pdf, { mergePages: true });
 
       return {
-        text: result.text,
-        charCount: result.text.length,
-        pageCount: result.total,
+        text,
+        charCount: text.length,
+        pageCount: totalPages,
         metadata: {
           fileType: 'pdf',
           fileName: path.basename(filePath)
