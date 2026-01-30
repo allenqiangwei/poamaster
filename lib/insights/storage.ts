@@ -29,7 +29,51 @@ export class FileStorage {
     this.uploadDir = uploadDir;
   }
 
-  async saveFile(file: File, assigneeId: string): Promise<string> {
+  async saveFile(file: File, assigneeId: string): Promise<string>;
+  async saveFile(buffer: Buffer, fileName: string, subDir: string): Promise<string>;
+  async saveFile(fileOrBuffer: File | Buffer, fileNameOrAssigneeId: string, subDir?: string): Promise<string> {
+    // Handle Buffer overload
+    if (Buffer.isBuffer(fileOrBuffer)) {
+      const buffer = fileOrBuffer;
+      const fileName = fileNameOrAssigneeId;
+      const safeSubDir = (subDir || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      // Ensure upload directory exists
+      const targetDir = path.join(this.uploadDir, safeSubDir);
+      await fs.mkdir(targetDir, { recursive: true });
+
+      // Sanitize filename
+      const safeName = sanitizeFilename(fileName);
+      if (!safeName || safeName === '.' || safeName === '..') {
+        throw new Error('Invalid filename');
+      }
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
+      const ext = path.extname(safeName);
+      const basename = path.basename(safeName, ext);
+      const uniqueFileName = `${timestamp}-${random}-${basename}${ext}`;
+      const filePath = path.join(targetDir, uniqueFileName);
+
+      // Write file
+      try {
+        await fs.writeFile(filePath, buffer);
+      } catch (error) {
+        try {
+          await fs.unlink(filePath);
+        } catch {}
+        throw error;
+      }
+
+      // Return relative path from upload dir
+      return path.join(this.uploadDir, safeSubDir, uniqueFileName);
+    }
+
+    // Handle File overload (original behavior)
+    const file = fileOrBuffer as File;
+    const assigneeId = fileNameOrAssigneeId;
+
     // Validate assigneeId
     if (!assigneeId || typeof assigneeId !== 'string' || assigneeId.trim().length === 0) {
       throw new Error('Invalid assigneeId');

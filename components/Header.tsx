@@ -13,7 +13,8 @@ import {
   Logout as LogoutIcon,
   Home as HomeIcon,
   List as ListIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  Assessment as PulseIcon
 } from '@mui/icons-material';
 
 export default function Header() {
@@ -79,6 +80,16 @@ export default function Header() {
             }}
           >
             负责人
+          </Button>
+          <Button
+            color="inherit"
+            startIcon={<PulseIcon />}
+            onClick={() => router.push('/pulse')}
+            sx={{
+              bgcolor: pathname?.startsWith('/pulse') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
+          >
+            项目管理
           </Button>
         </Box>
 

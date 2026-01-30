@@ -12,7 +12,7 @@ import {
   Button,
   Box
 } from '@mui/material';
-import { CheckBox as TodoIcon } from '@mui/icons-material';
+import { CheckBox as TodoIcon, Assessment as PulseIcon } from '@mui/icons-material';
 
 export default function HomePage() {
   const router = useRouter();
@@ -59,18 +59,26 @@ export default function HomePage() {
           </CardActions>
         </Card>
 
-        <Card sx={{ bgcolor: 'grey.100' }}>
+        <Card>
           <CardContent>
-            <Typography variant="h5" gutterBottom>
-              工具 2
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <PulseIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
+              <Typography variant="h5">
+                项目管理
+              </Typography>
+            </Box>
             <Typography variant="body2" color="text.secondary">
-              即将推出...
+              项目健康度追踪工具，支持多维度评估和风险预警
             </Typography>
           </CardContent>
           <CardActions>
-            <Button size="small" disabled fullWidth>
-              敬请期待
+            <Button
+              size="small"
+              variant="contained"
+              fullWidth
+              onClick={() => router.push('/pulse')}
+            >
+              进入工具
             </Button>
           </CardActions>
         </Card>
