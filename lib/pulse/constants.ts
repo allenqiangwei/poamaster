@@ -52,5 +52,5 @@ export const EMBEDDING_WEIGHT = 0.6;
 
 // File upload config
 export const PULSE_UPLOAD_DIR = 'uploads/pulse';
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 export const ALLOWED_MIME_TYPES = ['application/pdf', 'text/plain'];

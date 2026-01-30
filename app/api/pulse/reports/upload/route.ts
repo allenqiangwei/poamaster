@@ -8,11 +8,23 @@ import path from 'path';
 import fs from 'fs/promises';
 
 // POST /api/pulse/reports/upload
+// Note: Body size limit is configured in next.config.js (serverActions.bodySizeLimit)
 export async function POST(request: NextRequest) {
   let filePath: string | null = null;
 
   try {
-    const formData = await request.formData();
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (formDataError) {
+      // 捕获 FormData 解析错误（通常是文件太大）
+      console.error('FormData parsing error:', formDataError);
+      return NextResponse.json(
+        { success: false, error: '文件解析失败，可能是文件过大。请尝试上传小于 50MB 的文件' },
+        { status: 400 }
+      );
+    }
+
     const file = formData.get('file') as File | null;
     const projectId = formData.get('projectId') as string | null;
     const reportType = formData.get('reportType') as ReportType | null;
@@ -34,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { success: false, error: 'File size exceeds 10MB limit' },
+        { success: false, error: `文件大小超过限制（最大 ${MAX_FILE_SIZE / 1024 / 1024}MB）` },
         { status: 400 }
       );
     }
