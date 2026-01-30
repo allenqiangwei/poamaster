@@ -7,10 +7,10 @@ import { DIMENSION_LABELS } from '@/lib/pulse/constants';
 // POST /api/pulse/projects/:id/summary
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const projectId = params.id;
+    const { id: projectId } = await params;
 
     // 获取项目和所有条目
     const project = await prisma.pulseProject.findUnique({
