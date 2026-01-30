@@ -1,19 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateEmbedding } from '@/lib/pulse/similarity';
-import { BatchOperation } from '@/lib/pulse/types';
+import { Source, AICandidate } from '@/lib/pulse/types';
+
+interface FrontendOperation {
+  action: 'create' | 'update' | 'ignore';
+  candidate: AICandidate & { title: string };
+  updateTargetId?: string | null;
+}
 
 // POST /api/pulse/entries/batch
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, sessionId, operations } = body as {
+    const { projectId, source, operations } = body as {
       projectId: string;
-      sessionId: string;
-      operations: BatchOperation[];
+      source: Source;
+      operations: FrontendOperation[];
     };
 
-    if (!projectId || !operations || !Array.isArray(operations)) {
+    if (!projectId || !source || !operations || !Array.isArray(operations)) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
@@ -31,30 +37,35 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const text = op.title + ' ' + op.evidence;
+        const { candidate, updateTargetId } = op;
+        const title = candidate.title;
+        const evidence = candidate.evidence_quote;
+        const dimension = candidate.dimension;
+
+        const text = title + ' ' + evidence;
         const embedding = await generateEmbedding(text);
 
         if (op.action === 'create') {
           await tx.pulseEntry.create({
             data: {
               projectId,
-              dimension: op.dimension,
-              title: op.title.trim(),
-              evidenceCurrent: op.evidence.trim(),
+              dimension,
+              title: title.trim(),
+              evidenceCurrent: evidence.trim(),
               sourceCurrent: {
-                reportType: op.source.reportType,
-                reportDate: op.source.reportDate,
-                fileName: op.source.fileName,
-                ...(op.source.page !== undefined && { page: op.source.page })
+                reportType: source.reportType,
+                reportDate: source.reportDate,
+                fileName: source.fileName,
+                ...(source.page !== undefined && { page: source.page })
               },
               evidenceHistory: [],
               embedding
             }
           });
           created++;
-        } else if (op.action === 'update' && op.targetEntryId) {
+        } else if (op.action === 'update' && updateTargetId) {
           const existing = await tx.pulseEntry.findUnique({
-            where: { id: op.targetEntryId }
+            where: { id: updateTargetId }
           });
 
           if (existing) {
@@ -67,15 +78,15 @@ export async function POST(request: NextRequest) {
             const currentHistory = (existing.evidenceHistory as unknown[]) || [];
 
             const updateData: Record<string, unknown> = {
-              title: op.title.trim(),
-              evidenceCurrent: op.evidence.trim(),
-              sourceCurrent: op.source,
+              title: title.trim(),
+              evidenceCurrent: evidence.trim(),
+              sourceCurrent: source,
               evidenceHistory: [...currentHistory, historyItem],
               embedding
             };
 
             await tx.pulseEntry.update({
-              where: { id: op.targetEntryId },
+              where: { id: updateTargetId },
               data: updateData
             });
             updated++;
