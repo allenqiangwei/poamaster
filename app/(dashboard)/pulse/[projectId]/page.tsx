@@ -88,6 +88,15 @@ export default function ProjectDetailPage() {
     severity: 'success'
   });
 
+  // Edit project
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editedName, setEditedName] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Delete project
+  const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false);
+  const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
+
   const fetchProject = useCallback(async () => {
     try {
       const res = await fetch(`/api/pulse/projects/${projectId}`);
@@ -137,6 +146,69 @@ export default function ProjectDetailPage() {
       });
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  const handleEditClick = () => {
+    if (project) {
+      setEditedName(project.name);
+      setEditDialogOpen(true);
+    }
+  };
+
+  const handleEditSave = async () => {
+    if (!editedName.trim()) {
+      setError('项目名称不能为空');
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      const res = await fetch(`/api/pulse/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editedName.trim() })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setProject(data.data);
+        setEditDialogOpen(false);
+        setError(null);
+      } else {
+        setError(data.error);
+      }
+    } catch {
+      setError('修改项目名称失败');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleDeleteProjectClick = () => {
+    setDeleteProjectDialogOpen(true);
+  };
+
+  const handleDeleteProjectConfirm = async () => {
+    setDeleteProjectLoading(true);
+    try {
+      const res = await fetch(`/api/pulse/projects/${projectId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        // Redirect to project list after successful deletion
+        router.push('/pulse');
+      } else {
+        setError(data.error);
+        setDeleteProjectDialogOpen(false);
+      }
+    } catch {
+      setError('删除项目失败');
+      setDeleteProjectDialogOpen(false);
+    } finally {
+      setDeleteProjectLoading(false);
     }
   };
 
@@ -264,6 +336,20 @@ export default function ProjectDetailPage() {
         <Typography variant="h4" sx={{ flex: 1 }}>
           {project.name}
         </Typography>
+        <IconButton
+          size="small"
+          onClick={handleEditClick}
+          sx={{ ml: 1 }}
+        >
+          <EditIcon />
+        </IconButton>
+        <IconButton
+          size="small"
+          color="error"
+          onClick={handleDeleteProjectClick}
+        >
+          <DeleteIcon />
+        </IconButton>
         <Button
           variant="outlined"
           startIcon={<AutoAwesomeIcon />}
@@ -423,7 +509,7 @@ export default function ProjectDetailPage() {
         })
       )}
 
-      {/* Delete confirmation dialog */}
+      {/* Delete entry confirmation dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>确认删除</DialogTitle>
         <DialogContent>
@@ -435,6 +521,53 @@ export default function ProjectDetailPage() {
           <Button onClick={() => setDeleteDialogOpen(false)}>取消</Button>
           <Button onClick={handleDeleteConfirm} color="error" disabled={deleting}>
             {deleting ? '删除中...' : '删除'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit project dialog */}
+      <Dialog open={editDialogOpen} onClose={() => !editLoading && setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>编辑项目名称</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="项目名称"
+            type="text"
+            fullWidth
+            value={editedName}
+            onChange={(e) => setEditedName(e.target.value)}
+            disabled={editLoading}
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)} disabled={editLoading}>
+            取消
+          </Button>
+          <Button onClick={handleEditSave} variant="contained" disabled={editLoading || !editedName.trim()}>
+            {editLoading ? '保存中...' : '保存'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete project confirmation dialog */}
+      <Dialog open={deleteProjectDialogOpen} onClose={() => !deleteProjectLoading && setDeleteProjectDialogOpen(false)}>
+        <DialogTitle>确认删除项目</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除项目 &ldquo;{project.name}&rdquo; 吗？
+          </DialogContentText>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            删除项目将同时删除该项目下的所有报告和条目，此操作不可恢复！
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteProjectDialogOpen(false)} disabled={deleteProjectLoading}>
+            取消
+          </Button>
+          <Button onClick={handleDeleteProjectConfirm} color="error" variant="contained" disabled={deleteProjectLoading}>
+            {deleteProjectLoading ? '删除中...' : '确认删除'}
           </Button>
         </DialogActions>
       </Dialog>
