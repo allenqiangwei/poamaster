@@ -14,9 +14,12 @@ import {
   MenuItem,
   TextField,
   LinearProgress,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
 import { ReportType } from '@prisma/client';
 
 const REPORT_TYPE_LABELS: Record<ReportType, string> = {
@@ -31,7 +34,9 @@ export default function UploadPage() {
   const projectId = params.projectId as string;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [inputMode, setInputMode] = useState<'file' | 'text'>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [textInput, setTextInput] = useState('');
   const [reportType, setReportType] = useState<ReportType>('WEEKLY');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -43,8 +48,12 @@ export default function UploadPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      if (!selectedFile.name.endsWith('.pdf')) {
-        setError('请选择 PDF 文件');
+      const validExtensions = ['.pdf', '.txt'];
+      const hasValidExtension = validExtensions.some(ext =>
+        selectedFile.name.toLowerCase().endsWith(ext)
+      );
+      if (!hasValidExtension) {
+        setError('请选择 PDF 或文本文件');
         return;
       }
       setFile(selectedFile);
@@ -56,8 +65,12 @@ export default function UploadPage() {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
-      if (!droppedFile.name.endsWith('.pdf')) {
-        setError('请选择 PDF 文件');
+      const validExtensions = ['.pdf', '.txt'];
+      const hasValidExtension = validExtensions.some(ext =>
+        droppedFile.name.toLowerCase().endsWith(ext)
+      );
+      if (!hasValidExtension) {
+        setError('请选择 PDF 或文本文件');
         return;
       }
       setFile(droppedFile);
@@ -66,8 +79,13 @@ export default function UploadPage() {
   };
 
   const handleUpload = async () => {
-    if (!file) {
+    // 验证输入
+    if (inputMode === 'file' && !file) {
       setError('请先选择文件');
+      return;
+    }
+    if (inputMode === 'text' && !textInput.trim()) {
+      setError('请输入报告内容');
       return;
     }
 
@@ -76,9 +94,18 @@ export default function UploadPage() {
     setError(null);
 
     try {
+      // 如果是文本模式，创建虚拟 PDF 文件（实际上创建 txt 文件）
+      let uploadFile = file;
+      if (inputMode === 'text') {
+        const blob = new Blob([textInput], { type: 'text/plain' });
+        uploadFile = new File([blob], `report-${Date.now()}.txt`, { type: 'text/plain' });
+      }
+
+      if (!uploadFile) return;
+
       // Step 1: Upload file
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       formData.append('projectId', projectId);
       formData.append('reportType', reportType);
       formData.append('reportDate', new Date(reportDate).toISOString());
@@ -143,8 +170,32 @@ export default function UploadPage() {
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
+        {/* Input mode toggle */}
+        <ToggleButtonGroup
+          value={inputMode}
+          exclusive
+          onChange={(_, newMode) => {
+            if (newMode && !uploading && !extracting) {
+              setInputMode(newMode);
+              setError(null);
+            }
+          }}
+          fullWidth
+          sx={{ mb: 3 }}
+        >
+          <ToggleButton value="file">
+            <CloudUploadIcon sx={{ mr: 1 }} />
+            上传文件
+          </ToggleButton>
+          <ToggleButton value="text">
+            <TextFieldsIcon sx={{ mr: 1 }} />
+            直接输入
+          </ToggleButton>
+        </ToggleButtonGroup>
+
         {/* File drop zone */}
-        <Paper
+        {inputMode === 'file' && (
+          <Paper
           variant="outlined"
           sx={{
             p: 4,
@@ -163,7 +214,7 @@ export default function UploadPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf"
+            accept=".pdf,.txt"
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
@@ -174,13 +225,38 @@ export default function UploadPage() {
             </Typography>
           ) : (
             <>
-              <Typography>点击或拖拽 PDF 文件到此处</Typography>
+              <Typography>点击或拖拽文件到此处</Typography>
               <Typography variant="caption" color="text.secondary">
-                支持周报、日报等 PDF 格式报告
+                支持 PDF、TXT 格式的周报、日报等报告
               </Typography>
             </>
           )}
         </Paper>
+        )}
+
+        {/* Text input */}
+        {inputMode === 'text' && (
+          <Box sx={{ mb: 3 }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={12}
+              placeholder="在此粘贴或输入报告内容...&#10;&#10;支持直接粘贴周报、日报等文本内容"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              disabled={uploading || extracting}
+              variant="outlined"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontFamily: 'monospace',
+                },
+              }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              {textInput.length} 字符
+            </Typography>
+          </Box>
+        )}
 
         {/* Report info */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
@@ -224,10 +300,15 @@ export default function UploadPage() {
           <Button
             variant="contained"
             onClick={handleUpload}
-            disabled={!file || uploading || extracting}
+            disabled={
+              uploading ||
+              extracting ||
+              (inputMode === 'file' && !file) ||
+              (inputMode === 'text' && !textInput.trim())
+            }
             fullWidth
           >
-            {uploading ? '上传中...' : extracting ? 'AI 提取中...' : '上传并提取'}
+            {uploading ? '上传中...' : extracting ? 'AI 提取中...' : inputMode === 'file' ? '上传并提取' : '提交并提取'}
           </Button>
         </Box>
       </Paper>

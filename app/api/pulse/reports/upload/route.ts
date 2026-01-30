@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { success: false, error: 'Only PDF files are allowed' },
+        { success: false, error: '只支持 PDF 和文本文件' },
         { status: 400 }
       );
     }
