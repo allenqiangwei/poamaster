@@ -68,7 +68,30 @@ export async function POST(request: NextRequest) {
 
     const parser = new FileParser();
     const fullPath = path.join(process.cwd(), filePath);
-    const parseResult = await parser.parseFromPath(fullPath);
+
+    console.log('[Upload] Parsing file:', { fileName: file.name, fileType: file.type, fullPath });
+
+    let parseResult;
+    try {
+      parseResult = await parser.parseFromPath(fullPath);
+      console.log('[Upload] Parse result:', {
+        textLength: parseResult.text?.length || 0,
+        charCount: parseResult.charCount,
+        hasText: !!parseResult.text
+      });
+    } catch (parseError) {
+      console.error('[Upload] Parse error:', parseError);
+      // 继续创建报告但标记为失败
+      parseResult = {
+        text: '',
+        charCount: 0,
+        metadata: { fileType: 'unknown', fileName: file.name }
+      };
+    }
+
+    if (!parseResult.text || parseResult.text.trim().length === 0) {
+      console.error('[Upload] Parse failed - no text extracted from file:', file.name);
+    }
 
     const report = await prisma.pulseReport.create({
       data: {
@@ -79,7 +102,7 @@ export async function POST(request: NextRequest) {
         reportDate: new Date(reportDate),
         parsedText: parseResult.text,
         parseStatus: parseResult.text ? 'SUCCESS' : 'FAILED',
-        parseError: parseResult.text ? null : 'Failed to extract text from PDF'
+        parseError: parseResult.text ? null : 'Failed to extract text from file'
       }
     });
 
