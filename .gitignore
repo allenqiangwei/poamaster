@@ -59,3 +59,4 @@ Thumbs.db
 yarn-debug.log*
 yarn-error.log*
 uploads/
+.worktrees/
