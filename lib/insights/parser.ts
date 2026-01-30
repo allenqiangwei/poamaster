@@ -69,9 +69,26 @@ export class FileParser {
     const buffer = new Uint8Array(arrayBuffer);
 
     // 使用 unpdf (serverless-friendly)
-    const { extractText, getDocumentProxy } = await import('unpdf');
+    const { extractText, getDocumentProxy, renderPageAsImage } = await import('unpdf');
     const pdf = await getDocumentProxy(buffer);
     const { totalPages, text } = await extractText(pdf, { mergePages: true });
+
+    // 如果提取的文本为空，说明是图片型 PDF，使用 OCR
+    if (!text || text.trim().length === 0) {
+      console.log('[Parser] PDF has no embedded text, using OCR for', totalPages, 'pages');
+      const ocrText = await this.performPdfOcr(pdf, totalPages, file.name);
+
+      return {
+        text: ocrText,
+        charCount: ocrText.length,
+        pageCount: totalPages,
+        metadata: {
+          fileType: 'pdf',
+          fileName: file.name,
+          ocrUsed: true
+        }
+      };
+    }
 
     return {
       text,
@@ -82,6 +99,75 @@ export class FileParser {
         fileName: file.name
       }
     };
+  }
+
+  private async performPdfOcr(pdf: any, totalPages: number, fileName: string): Promise<string> {
+    const { renderPageAsImage } = await import('unpdf');
+    const { getOpenAIClient } = await import('@/lib/openai');
+    const client = await getOpenAIClient();
+
+    const pageTexts: string[] = [];
+
+    // 限制最多处理前 10 页（避免成本过高）
+    const pagesToProcess = Math.min(totalPages, 10);
+
+    for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
+      try {
+        console.log(`[Parser] OCR processing page ${pageNum}/${pagesToProcess}`);
+
+        // 渲染页面为图片（unpdf 返回 PNG Buffer）
+        const imageBuffer = await renderPageAsImage(pdf, pageNum, { canvas: null });
+
+        // 确保是 Buffer 类型
+        const buffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer);
+        const base64Image = buffer.toString('base64');
+        const dataUrl = `data:image/png;base64,${base64Image}`;
+
+        // 使用 GPT-4 Vision API 提取文本
+        const response = await client.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `请仔细提取这个 PDF 页面中的所有文本内容。这是 ${fileName} 的第 ${pageNum} 页。
+
+要求：
+- 提取所有可见文字，保持原始格式和段落
+- 如果是表格，保持表格结构
+- 如果是列表，保持列表格式
+- 不要添加解释或总结，只提取原始文字`
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: dataUrl,
+                    detail: 'high'
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 4096
+        });
+
+        const pageText = response.choices[0]?.message?.content || '';
+        if (pageText.trim().length > 0) {
+          pageTexts.push(`\n--- 第 ${pageNum} 页 ---\n${pageText}`);
+        }
+      } catch (error) {
+        console.error(`[Parser] OCR failed for page ${pageNum}:`, error);
+        pageTexts.push(`\n--- 第 ${pageNum} 页 ---\n[OCR 识别失败]`);
+      }
+    }
+
+    if (totalPages > pagesToProcess) {
+      pageTexts.push(`\n\n[注：PDF 共 ${totalPages} 页，已处理前 ${pagesToProcess} 页]`);
+    }
+
+    return pageTexts.join('\n');
   }
 
   private async parseImage(file: File): Promise<ParseResult> {
@@ -219,6 +305,23 @@ export class FileParser {
       const uint8Buffer = new Uint8Array(buffer);
       const pdf = await getDocumentProxy(uint8Buffer);
       const { totalPages, text } = await extractText(pdf, { mergePages: true });
+
+      // 如果提取的文本为空，说明是图片型 PDF，使用 OCR
+      if (!text || text.trim().length === 0) {
+        console.log('[Parser] PDF has no embedded text, using OCR for', totalPages, 'pages');
+        const ocrText = await this.performPdfOcr(pdf, totalPages, path.basename(filePath));
+
+        return {
+          text: ocrText,
+          charCount: ocrText.length,
+          pageCount: totalPages,
+          metadata: {
+            fileType: 'pdf',
+            fileName: path.basename(filePath),
+            ocrUsed: true
+          }
+        };
+      }
 
       return {
         text,
