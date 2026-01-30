@@ -104,7 +104,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 使用提取的文本提取任务
+    console.log('[Task Extract] Extracted text length:', extractedText.length);
+    console.log('[Task Extract] Text preview:', extractedText.substring(0, 500));
+
     const tasks = await extractTasksFromText(extractedText);
+
+    console.log('[Task Extract] Tasks found:', tasks.length);
+    if (tasks.length === 0) {
+      console.log('[Task Extract] No tasks identified from text');
+    }
 
     return NextResponse.json({
       success: true,
