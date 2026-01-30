@@ -31,6 +31,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { EntryDimension } from '@prisma/client';
 import { DIMENSION_LABELS, DIMENSION_ORDER, UNDO_WINDOW_MS } from '@/lib/pulse/constants';
 
@@ -79,6 +80,14 @@ export default function ProjectDetailPage() {
   // Undo snackbar
   const [undoSnackbar, setUndoSnackbar] = useState<{ open: boolean; entryId: string; token: string } | null>(null);
 
+  // AI Summary
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summarySnackbar, setSummarySnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
   const fetchProject = useCallback(async () => {
     try {
       const res = await fetch(`/api/pulse/projects/${projectId}`);
@@ -98,6 +107,38 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
+
+  const handleAISummary = async () => {
+    setSummaryLoading(true);
+    try {
+      const res = await fetch(`/api/pulse/projects/${projectId}/summary`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setSummarySnackbar({
+          open: true,
+          message: '项目总结已生成并发送到飞书！',
+          severity: 'success'
+        });
+      } else {
+        setSummarySnackbar({
+          open: true,
+          message: data.error || 'AI 总结失败',
+          severity: 'error'
+        });
+      }
+    } catch (error) {
+      setSummarySnackbar({
+        open: true,
+        message: '网络错误，请重试',
+        severity: 'error'
+      });
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   const toggleDimension = (dimension: string) => {
     setExpandedDimensions(prev => {
@@ -225,6 +266,14 @@ export default function ProjectDetailPage() {
         </Typography>
         <Button
           variant="outlined"
+          startIcon={<AutoAwesomeIcon />}
+          onClick={handleAISummary}
+          disabled={summaryLoading || !project.entries || project.entries.length === 0}
+        >
+          {summaryLoading ? <CircularProgress size={20} /> : 'AI 总结'}
+        </Button>
+        <Button
+          variant="outlined"
           startIcon={<UploadIcon />}
           onClick={() => router.push(`/pulse/${projectId}/upload`)}
         >
@@ -238,6 +287,20 @@ export default function ProjectDetailPage() {
           手动添加
         </Button>
       </Box>
+
+      {/* Summary Snackbar */}
+      <Snackbar
+        open={summarySnackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSummarySnackbar({ ...summarySnackbar, open: false })}
+      >
+        <Alert
+          severity={summarySnackbar.severity}
+          onClose={() => setSummarySnackbar({ ...summarySnackbar, open: false })}
+        >
+          {summarySnackbar.message}
+        </Alert>
+      </Snackbar>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
