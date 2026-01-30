@@ -68,14 +68,15 @@ export class FileParser {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 使用 pdf-parse 默认导出函数
-    const pdfParse = await import('pdf-parse');
-    const data = await pdfParse.default(buffer);
+    // 使用 pdf-parse v2.x (PDFParse 类)
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ buffer });
+    const result = await parser.getText();
 
     return {
-      text: data.text,
-      charCount: data.text.length,
-      pageCount: data.numpages,
+      text: result.text,
+      charCount: result.text.length,
+      pageCount: result.total,
       metadata: {
         fileType: 'pdf',
         fileName: file.name
@@ -214,13 +215,14 @@ export class FileParser {
     }
 
     if (ext === '.pdf') {
-      const pdfParse = await import('pdf-parse');
-      const data = await pdfParse.default(buffer);
+      const { PDFParse } = await import('pdf-parse');
+      const parser = new PDFParse({ buffer });
+      const result = await parser.getText();
 
       return {
-        text: data.text,
-        charCount: data.text.length,
-        pageCount: data.numpages,
+        text: result.text,
+        charCount: result.text.length,
+        pageCount: result.total,
         metadata: {
           fileType: 'pdf',
           fileName: path.basename(filePath)
