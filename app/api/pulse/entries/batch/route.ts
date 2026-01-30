@@ -98,6 +98,8 @@ export async function POST(request: NextRequest) {
         where: { id: projectId },
         data: { updatedAt: new Date() }
       });
+    }, {
+      timeout: 60000 // 增加超时到 60 秒，处理大批量 embedding 生成
     });
 
     const project = await prisma.pulseProject.findUnique({
