@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOpenAIClient } from '@/lib/openai';
+import { sendFeishuTextMessage } from '@/lib/feishu';
 import { DIMENSION_LABELS } from '@/lib/pulse/constants';
 
 // POST /api/pulse/projects/:id/summary
@@ -102,62 +103,24 @@ ${Object.entries(entriesByDimension).map(([dim, entries]) => {
     console.log('[Summary] AI summary generated, length:', summary.length);
 
     // 发送到飞书
-    const feishuWebhook = process.env.FEISHU_WEBHOOK_URL;
-    if (!feishuWebhook) {
-      console.warn('[Summary] FEISHU_WEBHOOK_URL not configured, skipping send');
+    try {
+      const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+      const feishuMessage = `📊 **${project.name} - 项目状态总结**\n\n${summary}\n\n────────────────────\n生成时间：${timestamp}\n💡 通过 POA Master 自动生成`;
+
+      await sendFeishuTextMessage(feishuMessage);
+      console.log('[Summary] Successfully sent to Feishu');
+    } catch (feishuError) {
+      console.error('[Summary] Failed to send to Feishu:', feishuError);
+      // 发送失败但总结已生成，返回部分成功
       return NextResponse.json({
         success: true,
         data: {
           summary,
           sent: false,
-          message: 'AI 总结生成成功，但未配置飞书 Webhook'
+          message: 'AI 总结生成成功，但发送到飞书失败。请检查飞书配置'
         }
       });
     }
-
-    // 发送飞书消息
-    const feishuPayload = {
-      msg_type: 'post',
-      content: {
-        post: {
-          zh_cn: {
-            title: `📊 ${project.name} - 项目状态总结`,
-            content: [
-              [
-                {
-                  tag: 'text',
-                  text: summary
-                }
-              ],
-              [
-                {
-                  tag: 'text',
-                  text: `\n\n生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
-                }
-              ]
-            ]
-          }
-        }
-      }
-    };
-
-    const feishuRes = await fetch(feishuWebhook, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(feishuPayload)
-    });
-
-    if (!feishuRes.ok) {
-      console.error('[Summary] Failed to send to Feishu:', await feishuRes.text());
-      return NextResponse.json(
-        { success: false, error: '发送到飞书失败' },
-        { status: 500 }
-      );
-    }
-
-    console.log('[Summary] Successfully sent to Feishu');
 
     return NextResponse.json({
       success: true,
