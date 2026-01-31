@@ -27,18 +27,19 @@ function validateItems(items: any[]): items is Array<{
 
   const validDimensions = Object.values(DIMENSIONS);
 
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     // Validate required fields
     if (!item || typeof item !== 'object') {
-      throw new Error('无效的项目格式');
+      throw new Error(`项目 #${i + 1}: 无效的项目格式`);
     }
 
     if (!item.dimension || typeof item.dimension !== 'string') {
-      throw new Error('项目缺少必需字段: dimension');
+      throw new Error(`项目 #${i + 1}: 缺少必需字段 dimension`);
     }
 
     if (!item.content || typeof item.content !== 'string' || item.content.trim().length === 0) {
-      throw new Error('项目缺少必需字段: content');
+      throw new Error(`项目 #${i + 1} (维度: ${item.dimension}): 缺少必需字段 content 或内容为空`);
     }
 
     // Validate dimension value
@@ -91,6 +92,12 @@ export async function POST(request: NextRequest) {
     // 2. Parse request body
     const body = await request.json();
     const { artifactId, items } = body;
+
+    console.log('[Confirm] Request received:', {
+      artifactId,
+      itemCount: Array.isArray(items) ? items.length : 'not array',
+      firstItem: Array.isArray(items) && items.length > 0 ? items[0] : null
+    });
 
     if (!artifactId || !items || !Array.isArray(items)) {
       return NextResponse.json(
