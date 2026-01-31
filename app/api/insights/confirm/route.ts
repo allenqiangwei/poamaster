@@ -99,6 +99,17 @@ export async function POST(request: NextRequest) {
       firstItem: Array.isArray(items) && items.length > 0 ? items[0] : null
     });
 
+    // Log items with empty or missing content
+    if (Array.isArray(items)) {
+      const emptyItems = items
+        .map((item, index) => ({ index: index + 1, item }))
+        .filter(({ item }) => !item.content || item.content.trim().length === 0);
+
+      if (emptyItems.length > 0) {
+        console.log('[Confirm] Items with empty content:', emptyItems);
+      }
+    }
+
     if (!artifactId || !items || !Array.isArray(items)) {
       return NextResponse.json(
         { success: false, error: '缺少必需参数: artifactId 和 items' },

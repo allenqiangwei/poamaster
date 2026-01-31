@@ -65,6 +65,17 @@ export default function ReviewPage({ artifact }: { artifact: ArtifactWithRelatio
       return;
     }
 
+    // Check for empty content
+    const emptyItems = items.filter(item => !item.content || item.content.trim().length === 0);
+    if (emptyItems.length > 0) {
+      setSnackbar({
+        open: true,
+        message: `有 ${emptyItems.length} 个条目内容为空，请填写或删除这些条目`,
+        severity: 'error',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch('/api/insights/confirm', {
@@ -219,6 +230,8 @@ export default function ReviewPage({ artifact }: { artifact: ArtifactWithRelatio
                         onChange={(e) => handleEdit(item.id, e.target.value)}
                         variant="outlined"
                         size="small"
+                        error={!item.content || item.content.trim().length === 0}
+                        helperText={!item.content || item.content.trim().length === 0 ? '内容不能为空' : ''}
                       />
                       <IconButton
                         onClick={() => handleDeleteClick(item.id)}
