@@ -151,8 +151,23 @@ ${tasksSummary}
     });
   } catch (error) {
     console.error('Generate weekly topics error:', error);
+
+    // Provide user-friendly error messages for common issues
+    let message = '生成失败，请稍后重试';
+
+    if (error instanceof Error) {
+      if (error.message.includes('Connection error') ||
+          error.message.includes('ECONNRESET') ||
+          error.message.includes('fetch failed')) {
+        message = '网络连接失败。请检查网络连接、代理设置，或稍后重试';
+      } else if (error.message.includes('timeout') ||
+                 error.message.includes('timed out')) {
+        message = '请求超时。请稍后重试或检查网络连接';
+      }
+    }
+
     return NextResponse.json(
-      { success: false, error: '生成失败，请稍后重试' },
+      { success: false, error: message },
       { status: 500 }
     );
   }
