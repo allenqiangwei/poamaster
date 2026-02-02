@@ -109,22 +109,24 @@ ${analysisSummary}
    - 说明为什么需要做这件事
    - 如果可能，建议截止时间
 
-3. **输出格式**（严格按照 JSON 格式）：
+3. **输出格式**（必须返回 JSON 对象，包含 todos 数组）：
 \`\`\`json
-[
-  {
-    "title": "待办事项标题",
-    "dod": "完成标准",
-    "dueDate": "YYYY-MM-DD"
-  }
-]
+{
+  "todos": [
+    {
+      "title": "待办事项标题",
+      "dod": "完成标准",
+      "dueDate": "YYYY-MM-DD"
+    }
+  ]
+}
 \`\`\`
 
 注意：
-- 只输出 JSON 数组，不要其他说明
+- 必须返回一个包含 "todos" 数组的 JSON 对象
 - title 应该简短明确（建议30字以内）
 - dod 要具体描述如何判断任务完成
-- dueDate 可选，格式必须是 YYYY-MM-DD
+- dueDate 可选，格式必须是 YYYY-MM-DD，如果不确定就不要设置
 - 生成 3-8 个待办事项，聚焦最重要的行动`;
 
     const openai = await getOpenAIClient();
@@ -144,13 +146,20 @@ ${analysisSummary}
 
     const content = completion.choices[0]?.message?.content || '{}';
 
+    console.log('[Generate Todos] AI raw response:', content);
+
     let todos;
     try {
       const parsed = JSON.parse(content);
+      console.log('[Generate Todos] Parsed response:', parsed);
+
       // Handle both direct array and object with array property
       todos = Array.isArray(parsed) ? parsed : (parsed.todos || parsed.tasks || []);
+
+      console.log('[Generate Todos] Extracted todos:', todos);
     } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
+      console.error('[Generate Todos] Failed to parse AI response:', parseError);
+      console.error('[Generate Todos] Raw content:', content);
       return NextResponse.json(
         { success: false, error: 'AI 返回格式错误' },
         { status: 500 }
@@ -173,7 +182,12 @@ ${analysisSummary}
       }
     });
   } catch (error) {
-    console.error('Generate todos error:', error);
+    console.error('[Generate Todos] Error:', error);
+
+    if (error instanceof Error) {
+      console.error('[Generate Todos] Error message:', error.message);
+      console.error('[Generate Todos] Error stack:', error.stack);
+    }
 
     let message = '生成失败，请稍后重试';
 
@@ -185,6 +199,9 @@ ${analysisSummary}
       } else if (error.message.includes('timeout') ||
                  error.message.includes('timed out')) {
         message = '请求超时。请稍后重试或检查网络连接';
+      } else {
+        // Include error message in development
+        message = `生成失败: ${error.message}`;
       }
     }
 
