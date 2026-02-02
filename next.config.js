@@ -3,16 +3,11 @@ const nextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '50mb'
-    }
-  },
-  // Configure API routes to handle larger payloads
-  // This applies to Route Handlers in App Router
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
     },
-    responseLimit: false,
-  },
+    // Configure proxy/Route Handler max body size (50MB in bytes)
+    // This is the correct config for Next.js 16+
+    proxyClientMaxBodySize: 52428800
+  }
 };
 
 module.exports = nextConfig;
