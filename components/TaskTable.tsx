@@ -29,6 +29,7 @@ interface Task {
   dueDate: string | null;
   status: TaskStatus;
   assignee: { id: string; name: string } | null;
+  dod: string | null;
 }
 
 interface TaskTableProps {
@@ -142,7 +143,26 @@ export default function TaskTable({
               key={task.id}
               sx={{ bgcolor: getRowColor(task.dueDate, task.status) }}
             >
-              <TableCell>{task.title}</TableCell>
+              <TableCell>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {task.title}
+                  </Typography>
+                  {task.dod && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        display: 'block',
+                        mt: 0.5,
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      完成标准: {task.dod}
+                    </Typography>
+                  )}
+                </Box>
+              </TableCell>
               <TableCell>{task.assignee?.name || '-'}</TableCell>
               <TableCell>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
