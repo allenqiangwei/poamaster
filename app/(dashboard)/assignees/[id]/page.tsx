@@ -504,6 +504,9 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
     content: string;
   }>({ open: false, loading: false, content: '' });
 
+  // 发送飞书状态
+  const [sendingToFeishu, setSendingToFeishu] = useState(false);
+
   useEffect(() => {
     const loadParams = async () => {
       const resolvedParams = await params;
@@ -747,6 +750,37 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
       console.error('生成周会议题失败:', error);
       setSnackbar({ open: true, message: '生成失败', severity: 'error' });
       setWeeklyTopicsDialog({ open: false, loading: false, content: '' });
+    }
+  };
+
+  // 发送周会议题到飞书
+  const handleSendToFeishu = async () => {
+    if (!weeklyTopicsDialog.content || !assignee) return;
+
+    setSendingToFeishu(true);
+    try {
+      const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+      const message = `📋 **周会议题 - ${assignee.name}**\n\n${weeklyTopicsDialog.content}\n\n────────────────────\n生成时间：${timestamp}\n💡 通过 POA Master 生成`;
+
+      const res = await fetch('/api/insights/send-to-feishu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSnackbar({ open: true, message: '已发送到飞书', severity: 'success' });
+      } else {
+        setSnackbar({ open: true, message: data.error || '发送失败', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('发送到飞书失败:', error);
+      setSnackbar({ open: true, message: '发送失败，请稍后重试', severity: 'error' });
+    } finally {
+      setSendingToFeishu(false);
     }
   };
 
@@ -1149,6 +1183,14 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
           )}
         </DialogContent>
         <DialogActions>
+          <Button
+            onClick={handleSendToFeishu}
+            variant="contained"
+            color="primary"
+            disabled={weeklyTopicsDialog.loading || !weeklyTopicsDialog.content || sendingToFeishu}
+          >
+            {sendingToFeishu ? '发送中...' : '发送到飞书'}
+          </Button>
           <Button
             onClick={() => {
               navigator.clipboard.writeText(weeklyTopicsDialog.content);
