@@ -53,6 +53,9 @@ export default function PulseProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 默认负责人（强伟）的 ID
+  const [defaultAssigneeId, setDefaultAssigneeId] = useState<string | null>(null);
+
   // AI 生成待办事项相关状态
   const [aiDialog, setAiDialog] = useState<{
     open: boolean;
@@ -68,7 +71,24 @@ export default function PulseProjectsPage() {
 
   useEffect(() => {
     fetchProjects();
+    fetchDefaultAssignee();
   }, []);
+
+  const fetchDefaultAssignee = async () => {
+    try {
+      const res = await fetch('/api/assignees', { credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        // 查找名为"强伟"的负责人
+        const qiangwei = data.data.find((a: any) => a.name === '强伟');
+        if (qiangwei) {
+          setDefaultAssigneeId(qiangwei.id);
+        }
+      }
+    } catch (error) {
+      console.error('获取默认负责人失败:', error);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -197,7 +217,8 @@ export default function PulseProjectsPage() {
             title: todo.title,
             dod: todo.dod || null,
             dueDate: todo.dueDate ? new Date(todo.dueDate).toISOString() : null,
-            status: 'TODO'
+            status: 'TODO',
+            assigneeId: defaultAssigneeId // 默认分配给强伟
           })
         });
 
