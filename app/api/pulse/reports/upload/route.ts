@@ -7,8 +7,12 @@ import { PULSE_UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_MIME_TYPES } from '@/lib/pulse
 import path from 'path';
 import fs from 'fs/promises';
 
+// Configure route to handle large files (up to 50MB)
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 minutes timeout
+
 // POST /api/pulse/reports/upload
-// Note: Body size limit is configured in next.config.js (serverActions.bodySizeLimit)
 export async function POST(request: NextRequest) {
   let filePath: string | null = null;
 
