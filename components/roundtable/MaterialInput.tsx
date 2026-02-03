@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -26,30 +26,109 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
   const [materialText, setMaterialText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+
+  const validateFile = (file: File): boolean => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!['pdf', 'png', 'jpg', 'jpeg'].includes(ext || '')) {
+      setError(`不支持的文件类型: ${file.name}。支持 PDF、PNG、JPG 格式`);
+      return false;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError(`文件过大: ${file.name} (最大10MB)`);
+      return false;
+    }
+    return true;
+  };
+
+  const addFiles = (newFiles: File[]) => {
+    const validFiles = newFiles.filter(validateFile);
+    if (validFiles.length > 0) {
+      setFiles(prev => {
+        const combined = [...prev, ...validFiles];
+        if (combined.length > 5) {
+          setError('最多只能上传5个文件');
+          return combined.slice(0, 5);
+        }
+        setError('');
+        return combined;
+      });
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
-
-    // 验证文件
-    const validFiles = selectedFiles.filter(file => {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (!['pdf', 'png', 'jpg', 'jpeg'].includes(ext || '')) {
-        setError(`不支持的文件类型: ${file.name}`);
-        return false;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        setError(`文件过大: ${file.name} (最大10MB)`);
-        return false;
-      }
-      return true;
-    });
-
-    setFiles(prev => [...prev, ...validFiles].slice(0, 5));
+    addFiles(selectedFiles);
   };
 
   const handleRemoveFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
+
+  // 拖拽处理
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!loading) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (loading) return;
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    addFiles(droppedFiles);
+  };
+
+  // 粘贴处理
+  const handlePaste = (e: ClipboardEvent) => {
+    if (loading) return;
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const pastedFiles: File[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // 处理图片粘贴
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+
+        const blob = item.getAsFile();
+        if (blob) {
+          const extension = item.type.split('/')[1];
+          const fileName = `pasted-image-${Date.now()}.${extension}`;
+          const file = new File([blob], fileName, { type: item.type });
+          pastedFiles.push(file);
+        }
+      }
+    }
+
+    if (pastedFiles.length > 0) {
+      addFiles(pastedFiles);
+    }
+  };
+
+  // 添加和移除粘贴事件监听
+  useEffect(() => {
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [loading, files]);
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -77,24 +156,52 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
         sx={{ mb: 3 }}
       />
 
-      <TextField
-        fullWidth
-        multiline
-        rows={10}
-        label="材料内容（可选，如果上传了文件）"
-        placeholder="粘贴或输入讨论材料..."
-        value={materialText}
-        onChange={(e) => setMaterialText(e.target.value)}
-        disabled={loading}
-        sx={{ mb: 3 }}
-      />
+      <Box
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <TextField
+          fullWidth
+          multiline
+          rows={10}
+          label="材料内容（可选，如果上传了文件）"
+          placeholder="粘贴或输入讨论材料...&#10;&#10;💡 支持直接粘贴图片 (⌘+V / Ctrl+V)&#10;💡 支持拖拽文件到此区域"
+          value={materialText}
+          onChange={(e) => setMaterialText(e.target.value)}
+          disabled={loading}
+          sx={{
+            mb: 3,
+            '& .MuiOutlinedInput-root': {
+              backgroundColor: isDragging ? 'action.hover' : 'background.paper',
+              transition: 'background-color 0.2s',
+            }
+          }}
+        />
+      </Box>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2,
+          mb: 3,
+          border: isDragging ? '2px dashed' : '1px solid',
+          borderColor: isDragging ? 'primary.main' : 'divider',
+          backgroundColor: isDragging ? 'action.hover' : 'background.paper',
+          transition: 'all 0.2s',
+        }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <Typography variant="subtitle2" gutterBottom>
           文件上传（可选，最多5个文件）
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-          支持PDF、PNG、JPG格式，单个文件最大10MB
+          支持 PDF、PNG、JPG 格式，单个文件最大 10MB
+        </Typography>
+        <Typography variant="caption" color="primary.main" display="block" sx={{ mb: 2 }}>
+          💡 可以拖拽文件到此处，或粘贴剪贴板中的图片
         </Typography>
 
         <Button
