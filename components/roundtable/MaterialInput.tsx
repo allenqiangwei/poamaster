@@ -34,8 +34,13 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
       setError(`不支持的文件类型: ${file.name}。支持 PDF、PNG、JPG 格式`);
       return false;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError(`文件过大: ${file.name} (最大10MB)`);
+
+    // PDF 文件支持 50MB，图片文件支持 10MB
+    const maxSize = ext === 'pdf' ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    const maxSizeLabel = ext === 'pdf' ? '50MB' : '10MB';
+
+    if (file.size > maxSize) {
+      setError(`文件过大: ${file.name} (最大${maxSizeLabel})`);
       return false;
     }
     return true;
@@ -198,7 +203,7 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
           文件上传（可选，最多5个文件）
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-          支持 PDF、PNG、JPG 格式，单个文件最大 10MB
+          支持 PDF（最大50MB）、PNG/JPG（最大10MB）格式
         </Typography>
         <Typography variant="caption" color="primary.main" display="block" sx={{ mb: 2 }}>
           💡 可以拖拽文件到此处，或粘贴剪贴板中的图片
