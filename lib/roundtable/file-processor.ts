@@ -55,9 +55,29 @@ export class FileProcessor {
   }
 
   /**
-   * 使用OpenAI Vision提取文本
+   * 提取文本（根据文件类型选择不同的方法）
    */
   private async extractText(buffer: Buffer, mimeType: string): Promise<string> {
+    // PDF 文件：暂不支持 OCR，直接返回空字符串
+    // TODO: 未来可以集成 PDF 解析库或使用其他 API
+    if (mimeType === 'application/pdf') {
+      console.warn('[FileProcessor] PDF OCR not yet implemented, skipping text extraction');
+      return '[PDF文件已上传，但暂不支持自动文本提取。请在材料内容中手动输入关键信息]';
+    }
+
+    // 图片文件：使用 Vision API
+    if (mimeType.startsWith('image/')) {
+      return this.extractTextFromImage(buffer, mimeType);
+    }
+
+    // 其他文件类型
+    throw new Error(`不支持的文件类型: ${mimeType}。当前仅支持图片格式`);
+  }
+
+  /**
+   * 使用 OpenAI Vision 从图片提取文本
+   */
+  private async extractTextFromImage(buffer: Buffer, mimeType: string): Promise<string> {
     try {
       const base64Image = buffer.toString('base64');
       const dataUrl = `data:${mimeType};base64,${base64Image}`;
@@ -97,18 +117,18 @@ export class FileProcessor {
 
       return response.choices[0]?.message?.content || '';
     } catch (error) {
-      console.error('Failed to extract text from file:', error);
+      console.error('Failed to extract text from image:', error);
       if (error instanceof Error) {
         // 提供更友好的错误信息
         if (error.message.includes('Connection error') || error.message.includes('ECONNRESET') || error.message.includes('fetch failed')) {
-          throw new Error('文件识别失败：网络连接错误。请检查网络连接、代理设置，或稍后重试');
+          throw new Error('图片识别失败：网络连接错误。请检查网络连接、代理设置，或稍后重试');
         }
         if (error.message.includes('timeout') || error.message.includes('timed out')) {
-          throw new Error('文件识别超时。文件可能过大，请尝试压缩文件或稍后重试');
+          throw new Error('图片识别超时。图片可能过大，请尝试压缩图片或稍后重试');
         }
-        throw new Error(`文件识别失败: ${error.message}`);
+        throw new Error(`图片识别失败: ${error.message}`);
       }
-      throw new Error('文件识别失败：未知错误');
+      throw new Error('图片识别失败：未知错误');
     }
   }
 }
