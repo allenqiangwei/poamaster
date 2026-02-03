@@ -12,7 +12,7 @@ import {
   Button,
   Box
 } from '@mui/material';
-import { CheckBox as TodoIcon, Assessment as PulseIcon } from '@mui/icons-material';
+import { CheckBox as TodoIcon, Assessment as PulseIcon, Forum as RoundtableIcon } from '@mui/icons-material';
 
 export default function HomePage() {
   const router = useRouter();
@@ -77,6 +77,30 @@ export default function HomePage() {
               variant="contained"
               fullWidth
               onClick={() => router.push('/pulse')}
+            >
+              进入工具
+            </Button>
+          </CardActions>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <RoundtableIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
+              <Typography variant="h5">
+                圆桌会议
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              AI多角色讨论系统，为战略决策、项目提案提供全方位审查和建议
+            </Typography>
+          </CardContent>
+          <CardActions>
+            <Button
+              size="small"
+              variant="contained"
+              fullWidth
+              onClick={() => router.push('/roundtable')}
             >
               进入工具
             </Button>
