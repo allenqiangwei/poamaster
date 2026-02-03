@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     // 处理文件上传
     if (files.length > 0) {
-      const fileProcessor = new FileProcessor(apiKeyConfig.value);
+      const fileProcessor = new FileProcessor();
 
       for (const file of files) {
         if (file.size === 0) continue;
