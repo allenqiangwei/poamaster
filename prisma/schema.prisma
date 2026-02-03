@@ -305,3 +305,191 @@ model PulseEntry {
   @@index([projectId, dimension])
   @@index([deletedAt])
 }
+
+// ============================================
+// Roundtable Discussion - 圆桌会议模块
+// ============================================
+
+// 讨论模板
+model RoundtableTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  scenario    String?  @db.Text
+  enabled     Boolean  @default(true)
+  usageCount  Int      @default(0)
+
+  // 自动路由配置
+  keywords    Json     @default("[]") // ["立项", "新项目"]
+  priority    Int      @default(0)    // 匹配优先级
+
+  // 讨论流程配置
+  enabledRounds Json   @default("[\"clarify\",\"question\",\"rebuttal\",\"verdict\"]")
+
+  // 风险检查清单
+  riskChecklist Json   @default("[]")
+
+  // 输出要求
+  outputRequirements Json @default("{}")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles       RoundtableRole[]
+  discussions RoundtableDiscussion[]
+
+  @@index([enabled])
+  @@index([priority])
+}
+
+// 角色定义
+model RoundtableRole {
+  id             String   @id @default(cuid())
+  templateId     String
+  name           String   // "财务官"
+  responsibility String   @db.Text // "评估财务可行性和ROI"
+  focusAreas     String   @db.Text // "成本、收入、现金流"
+  order          Int      // 显示顺序
+  createdAt      DateTime @default(now())
+
+  template       RoundtableTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([order])
+}
+
+// 讨论记录
+model RoundtableDiscussion {
+  id           String   @id @default(cuid())
+  userId       String   // 创建者
+  templateId   String
+
+  // 基本信息
+  title        String
+  materialText String   @db.Text
+
+  // 处理状态
+  status       String   @default("processing") // processing/completed/failed
+  errorMessage String?  @db.Text
+
+  // 结果
+  conclusion   String?  @db.Text
+  conclusionType String? // pass/conditional_pass/reject/need_more_info
+  decisionReasoning String? @db.Text
+
+  // 元信息
+  processingStartedAt DateTime?
+  processingCompletedAt DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  template     RoundtableTemplate @relation(fields: [templateId], references: [id])
+  rounds       RoundtableRound[]
+  actions      RoundtableAction[]
+  risks        RoundtableRisk[]
+  attachments  RoundtableAttachment[]
+  assumptions  RoundtableAssumption[]
+
+  @@index([userId])
+  @@index([templateId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// 讨论回合
+model RoundtableRound {
+  id           String   @id @default(cuid())
+  discussionId String
+  roundNumber  Int      // 1, 2, 3, 4
+  roundType    String   // clarify/question/rebuttal/verdict
+  createdAt    DateTime @default(now())
+
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  messages     RoundtableMessage[]
+
+  @@index([discussionId])
+  @@index([roundNumber])
+}
+
+// 角色发言
+model RoundtableMessage {
+  id        String   @id @default(cuid())
+  roundId   String
+  roleName  String   // "财务官"
+  content   String   @db.Text
+  order     Int      // 发言顺序
+  createdAt DateTime @default(now())
+
+  round     RoundtableRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId])
+  @@index([order])
+}
+
+// 行动清单
+model RoundtableAction {
+  id                 String    @id @default(cuid())
+  discussionId       String
+  content            String    @db.Text
+  assignee           String?   // 建议负责人
+  deadline           DateTime? // 建议截止时间
+  acceptanceCriteria String?   @db.Text
+  priority           String    @default("medium") // high/medium/low
+
+  // 任务关联
+  taskId             String?   // 关联的Task ID
+
+  createdAt          DateTime  @default(now())
+
+  discussion         RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+  @@index([priority])
+}
+
+// 风险清单
+model RoundtableRisk {
+  id           String   @id @default(cuid())
+  discussionId String
+  description  String   @db.Text
+  impact       String   @db.Text
+  mitigation   String?  @db.Text
+  priority     String   @default("medium") // high/medium/low
+  riskType     String?  // market/financial/operational/legal/technical/strategic
+  createdAt    DateTime @default(now())
+
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+  @@index([priority])
+}
+
+// 文件附件
+model RoundtableAttachment {
+  id           String   @id @default(cuid())
+  discussionId String
+  filename     String
+  filepath     String
+  filetype     String   // pdf/png/jpg/jpeg
+  filesize     Int      // bytes
+  createdAt    DateTime @default(now())
+
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+}
+
+// 假设说明
+model RoundtableAssumption {
+  id           String   @id @default(cuid())
+  discussionId String
+  description  String   @db.Text
+  confidence   String   // high/medium/low
+  reasoning    String   @db.Text
+  createdAt    DateTime @default(now())
+
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+}
