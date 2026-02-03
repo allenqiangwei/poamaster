@@ -4,6 +4,19 @@ const prisma = new PrismaClient();
 
 const TEMPLATES = [
   {
+    name: '项目产品日报/周报/季报审核',
+    description: '审查项目和产品的定期报告，识别风险、瓶颈和机会，协调资源和决策',
+    scenario: '适用于项目日报/周报/季报审核、产品进展review、团队协作同步等场景',
+    keywords: ['日报', '周报', '季报', '项目进展', '产品进展', '进度审核', '项目报告'],
+    priority: 11,
+    roles: [
+      { name: '项目经理', responsibility: '评估项目进度和资源使用情况', focusAreas: '项目进度、里程碑达成、资源使用、团队协作、风险预警', order: 1 },
+      { name: '产品负责人', responsibility: '评估产品目标达成和用户反馈', focusAreas: '产品目标、功能交付、用户反馈、数据指标、优先级调整', order: 2 },
+      { name: '技术负责人', responsibility: '识别技术风险和质量问题', focusAreas: '技术债务、代码质量、性能问题、技术瓶颈、架构风险', order: 3 },
+      { name: '运营总监', responsibility: '评估业务指标和运营效率', focusAreas: '业务数据、运营效率、用户增长、成本控制、改进机会', order: 4 },
+    ]
+  },
+  {
     name: '项目/版本立项提案',
     description: '评估新项目或版本的立项申请，从产品、技术、财务、法务多角度审查可行性',
     scenario: '适用于新产品立项、重大版本规划、功能模块评估等场景',
