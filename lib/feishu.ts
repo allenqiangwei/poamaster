@@ -123,3 +123,37 @@ export async function sendFeishuTextMessage(text: string): Promise<void> {
     throw new Error(`发送飞书消息失败: ${data.msg || JSON.stringify(data)} (code: ${data.code})`);
   }
 }
+
+/**
+ * 通过 Webhook 发送飞书通知（用于圆桌会议等功能）
+ */
+export async function sendFeishuNotification(
+  webhookUrl: string,
+  message: any
+): Promise<void> {
+  const res = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(message),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`发送飞书 Webhook 消息失败: HTTP ${res.status} - ${errorText.substring(0, 200)}`);
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`飞书 Webhook 返回非 JSON 响应: ${text.substring(0, 200)}`);
+  }
+
+  const data = await res.json();
+
+  // 飞书 Webhook 成功返回 {"code":0}
+  if (data.code !== undefined && data.code !== 0) {
+    throw new Error(`发送飞书 Webhook 消息失败: ${data.msg || JSON.stringify(data)} (code: ${data.code})`);
+  }
+}
