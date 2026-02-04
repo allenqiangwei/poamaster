@@ -56,6 +56,15 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
           return combined.slice(0, 5);
         }
         setError('');
+
+        // 如果标题为空且这是第一个文件，自动设置标题为文件名 + " 讨论"
+        if (prev.length === 0 && !title.trim() && validFiles.length > 0) {
+          const firstFile = validFiles[0];
+          // 移除文件扩展名
+          const fileNameWithoutExt = firstFile.name.replace(/\.[^/.]+$/, '');
+          setTitle(`${fileNameWithoutExt} 讨论`);
+        }
+
         return combined;
       });
     }
