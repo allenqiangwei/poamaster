@@ -23,7 +23,9 @@ import {
   Refresh as RefreshIcon,
   ExpandMore as ExpandMoreIcon,
   CheckCircle as CheckIcon,
-  HourglassEmpty as ProcessingIcon
+  HourglassEmpty as ProcessingIcon,
+  Description as MaterialIcon,
+  AttachFile as AttachmentIcon
 } from '@mui/icons-material';
 import DiscussionReport from '@/components/roundtable/DiscussionReport';
 
@@ -134,6 +136,99 @@ export default function DiscussionDetailPage() {
           </Button>
         )}
       </Box>
+
+      {/* 提交的材料 */}
+      <Accordion sx={{ mb: 3 }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <MaterialIcon />
+            <Typography variant="h6">提交的材料</Typography>
+            {discussion.attachments && discussion.attachments.length > 0 && (
+              <Chip label={`${discussion.attachments.length}个附件`} size="small" />
+            )}
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails>
+          {/* 文本材料 */}
+          {discussion.materialText && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" color="primary" gutterBottom>
+                文本材料
+              </Typography>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  bgcolor: 'grey.50',
+                  maxHeight: 400,
+                  overflow: 'auto'
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {discussion.materialText}
+                </Typography>
+              </Paper>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {discussion.materialText.length} 字符
+              </Typography>
+            </Box>
+          )}
+
+          {/* 附件列表 */}
+          {discussion.attachments && discussion.attachments.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" color="primary" gutterBottom>
+                附件 ({discussion.attachments.length})
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {discussion.attachments.map((attachment: any) => (
+                  <Paper
+                    key={attachment.id}
+                    variant="outlined"
+                    sx={{
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2
+                    }}
+                  >
+                    <AttachmentIcon color="action" />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" fontWeight="medium">
+                        {attachment.filename}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {attachment.filetype.toUpperCase()} · {(attachment.filesize / 1024).toFixed(1)} KB
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      href={attachment.filepath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      查看
+                    </Button>
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {!discussion.materialText && (!discussion.attachments || discussion.attachments.length === 0) && (
+            <Alert severity="info">
+              未提交任何材料
+            </Alert>
+          )}
+        </AccordionDetails>
+      </Accordion>
 
       {discussion.status === 'processing' && (
         <>
