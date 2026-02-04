@@ -112,7 +112,7 @@ export class FileProcessor {
             ],
           },
         ],
-        max_tokens: 4000,
+        max_completion_tokens: 4000,
       });
 
       return response.choices[0]?.message?.content || '';

@@ -20,6 +20,7 @@ import {
 import { ArrowBack as ArrowBackIcon, Upload as UploadIcon, ContentPaste as ContentPasteIcon } from '@mui/icons-material';
 import { ExtractedTask } from '@/lib/openai';
 import TaskPreviewTable from '@/components/TaskPreviewTable';
+import ModelSelectionDialog from '@/components/ModelSelectionDialog';
 
 export default function NewTaskPage() {
   const router = useRouter();
@@ -31,6 +32,8 @@ export default function NewTaskPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showModelDialog, setShowModelDialog] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('');
 
   // 监听全局粘贴事件
   useEffect(() => {
@@ -89,9 +92,9 @@ export default function NewTaskPage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const validTypes = ['text/plain', 'application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
       if (!validTypes.includes(file.type)) {
-        setError('只支持 PDF、JPG、PNG 和 WEBP 格式');
+        setError('只支持 TXT、PDF、JPG、PNG 和 WEBP 格式');
         return;
       }
       setSelectedFile(file);
@@ -131,9 +134,9 @@ export default function NewTaskPage() {
 
     const file = e.dataTransfer.files[0];
     if (file) {
-      const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const validTypes = ['text/plain', 'application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
       if (!validTypes.includes(file.type)) {
-        setError('只支持 PDF、JPG、PNG 和 WEBP 格式');
+        setError('只支持 TXT、PDF、JPG、PNG 和 WEBP 格式');
         return;
       }
       setSelectedFile(file);
@@ -158,6 +161,12 @@ export default function NewTaskPage() {
       return;
     }
 
+    // 显示模型选择对话框
+    setShowModelDialog(true);
+  };
+
+  const handleModelConfirm = async (model: string) => {
+    setSelectedModel(model);
     setLoading(true);
     setError('');
 
@@ -168,12 +177,13 @@ export default function NewTaskPage() {
         res = await fetch('/api/tasks/extract', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, model }),
           credentials: 'include'
         });
       } else {
         const formData = new FormData();
         formData.append('file', selectedFile!);
+        formData.append('model', model);
 
         res = await fetch('/api/tasks/extract-from-file', {
           method: 'POST',
@@ -185,7 +195,7 @@ export default function NewTaskPage() {
       const data = await res.json();
 
       if (res.ok) {
-        if (data.tasks.length === 0) {
+        if (data.tasks?.length === 0 || data.tasks === undefined) {
           setError('未识别到任务，请检查输入内容');
         } else {
           setExtractedTasks(data.tasks);
@@ -328,7 +338,7 @@ export default function NewTaskPage() {
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                 <Typography variant="body2" color="text.secondary">
-                  支持 PDF、JPG、PNG、WEBP 格式
+                  支持 TXT、PDF、JPG、PNG、WEBP 格式
                 </Typography>
                 <Typography variant="body2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <UploadIcon fontSize="small" />
@@ -397,7 +407,7 @@ export default function NewTaskPage() {
                 ) : (
                   <>
                     <input
-                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      accept=".txt,.pdf,.jpg,.jpeg,.png,.webp"
                       style={{ display: 'none' }}
                       id="file-upload"
                       type="file"
@@ -426,7 +436,7 @@ export default function NewTaskPage() {
                           {isDragging ? '松开以上传文件' : '拖拽文件到此处，或点击选择'}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                          支持格式: PDF、JPG、PNG、WEBP
+                          支持格式: TXT、PDF、JPG、PNG、WEBP
                         </Typography>
                       </>
                     )}
@@ -482,6 +492,14 @@ export default function NewTaskPage() {
           </Box>
         </Box>
       )}
+
+      <ModelSelectionDialog
+        open={showModelDialog}
+        onClose={() => setShowModelDialog(false)}
+        onConfirm={handleModelConfirm}
+        title="选择提取模型"
+        description="请选择用于提取任务的 GPT 模型"
+      />
     </Container>
   );
 }

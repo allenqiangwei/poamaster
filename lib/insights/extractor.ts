@@ -71,6 +71,8 @@ export class InsightsExtractor {
     const client = await this.getClient();
     const modelToUse = model || EXTRACTION_CONFIG.MODEL_NAME;
 
+    console.log('[InsightsExtractor] 开始提取，使用模型:', modelToUse);
+
     try {
       const response = await client.chat.completions.create({
         model: modelToUse,
@@ -110,6 +112,10 @@ export class InsightsExtractor {
       // 转换为 DraftItemData[] 格式
       return this.convertToItems(parsed);
     } catch (error) {
+      // 记录原始错误以便调试
+      console.error('[InsightsExtractor] 原始错误:', error);
+      console.error('[InsightsExtractor] 使用的模型:', modelToUse);
+
       if (error instanceof Error) {
         // 提供更友好的连接错误信息
         if (error.message.includes('Connection error') || error.message.includes('ECONNRESET') || error.message.includes('fetch failed')) {

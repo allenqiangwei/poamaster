@@ -150,7 +150,7 @@ export class FileParser {
               ]
             }
           ],
-          max_tokens: 4096
+          max_completion_tokens: 4096
         });
 
         const pageText = response.choices[0]?.message?.content || '';
@@ -236,7 +236,7 @@ export class FileParser {
             ]
           }
         ],
-        max_tokens: 4096
+        max_completion_tokens: 4096
       });
 
       const text = response.choices[0]?.message?.content || '';
@@ -402,7 +402,7 @@ export class FileParser {
               ]
             }
           ],
-          max_tokens: 4096
+          max_completion_tokens: 4096
         });
 
         const text = response.choices[0]?.message?.content || '';

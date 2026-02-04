@@ -62,3 +62,54 @@ export async function GET(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Next.js 15+ requires awaiting params
+    const { id } = await params;
+
+    // 验证 Session
+    const token = request.cookies.get('session')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const session = await verifySession(token);
+    if (!session) {
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+    }
+
+    // 检查讨论是否存在并验证权限
+    const discussion = await prisma.roundtableDiscussion.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+
+    if (!discussion) {
+      return NextResponse.json(
+        { error: 'Discussion not found' },
+        { status: 404 }
+      );
+    }
+
+    if (discussion.userId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // 删除讨论（级联删除相关数据）
+    await prisma.roundtableDiscussion.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete discussion:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete discussion' },
+      { status: 500 }
+    );
+  }
+}

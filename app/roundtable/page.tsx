@@ -11,14 +11,26 @@ import {
   Chip,
   CircularProgress,
   Alert,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
-import { Add as AddIcon, PlayArrow as QuickStartIcon } from '@mui/icons-material';
+import { Add as AddIcon, PlayArrow as QuickStartIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function RoundtablePage() {
   const router = useRouter();
   const [discussions, setDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; discussionId: string | null; title: string }>({
+    open: false,
+    discussionId: null,
+    title: '',
+  });
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchDiscussions();
@@ -34,6 +46,38 @@ export default function RoundtablePage() {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, discussion: any) => {
+    e.stopPropagation(); // 防止触发卡片的点击事件
+    setDeleteDialog({
+      open: true,
+      discussionId: discussion.id,
+      title: discussion.title,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.discussionId) return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/roundtable/discussions/${deleteDialog.discussionId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error('删除失败');
+      }
+
+      // 从列表中移除已删除的讨论
+      setDiscussions(discussions.filter((d: any) => d.id !== deleteDialog.discussionId));
+      setDeleteDialog({ open: false, discussionId: null, title: '' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -91,11 +135,20 @@ export default function RoundtablePage() {
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
                   <Typography variant="h6">{discussion.title}</Typography>
-                  <Chip
-                    label={discussion.status === 'completed' ? '已完成' : discussion.status === 'processing' ? '处理中' : '失败'}
-                    size="small"
-                    color={discussion.status === 'completed' ? 'success' : discussion.status === 'processing' ? 'primary' : 'error'}
-                  />
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Chip
+                      label={discussion.status === 'completed' ? '已完成' : discussion.status === 'processing' ? '处理中' : '失败'}
+                      size="small"
+                      color={discussion.status === 'completed' ? 'success' : discussion.status === 'processing' ? 'primary' : 'error'}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleDeleteClick(e, discussion)}
+                      sx={{ color: 'error.main' }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </Box>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
                   模板：{discussion.template.name}
@@ -116,6 +169,35 @@ export default function RoundtablePage() {
           ))}
         </Box>
       )}
+
+      {/* 删除确认对话框 */}
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => !deleting && setDeleteDialog({ open: false, discussionId: null, title: '' })}
+      >
+        <DialogTitle>确认删除</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除讨论"{deleteDialog.title}"吗？此操作无法撤销。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteDialog({ open: false, discussionId: null, title: '' })}
+            disabled={deleting}
+          >
+            取消
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
+            variant="contained"
+            disabled={deleting}
+          >
+            {deleting ? '删除中...' : '确认删除'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -524,6 +524,9 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
     content: string;
   }>({ open: false, loading: false, content: '' });
 
+  // 周会议题模型选择对话框
+  const [showWeeklyTopicsModelDialog, setShowWeeklyTopicsModelDialog] = useState(false);
+
   // 发送飞书状态
   const [sendingToFeishu, setSendingToFeishu] = useState(false);
 
@@ -746,8 +749,13 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
     }
   };
 
-  // 生成周会议题
-  const handleGenerateWeeklyTopics = async () => {
+  // 生成周会议题 - 显示模型选择对话框
+  const handleGenerateWeeklyTopics = () => {
+    setShowWeeklyTopicsModelDialog(true);
+  };
+
+  // 确认模型后生成周会议题
+  const handleWeeklyTopicsModelConfirm = async (model: string) => {
     setWeeklyTopicsDialog({ open: true, loading: true, content: '' });
 
     try {
@@ -755,7 +763,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ assigneeId }),
+        body: JSON.stringify({ assigneeId, model }),
       });
 
       const data = await res.json();
@@ -1227,6 +1235,15 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 周会议题模型选择对话框 */}
+      <ModelSelectionDialog
+        open={showWeeklyTopicsModelDialog}
+        onClose={() => setShowWeeklyTopicsModelDialog(false)}
+        onConfirm={handleWeeklyTopicsModelConfirm}
+        title="选择生成模型"
+        description="请选择用于生成周会议题的 GPT 模型"
+      />
 
       {/* Snackbar for notifications */}
       <Snackbar

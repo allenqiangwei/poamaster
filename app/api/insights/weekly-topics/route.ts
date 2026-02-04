@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
-import { getOpenAIClient } from '@/lib/openai';
+import { getOpenAIClient, getOpenAIModel } from '@/lib/openai';
 
 const DIMENSION_LABELS: Record<string, string> = {
   focus: '当前关注',
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { assigneeId } = body;
+    const { assigneeId, model } = body;
 
     if (!assigneeId) {
       return NextResponse.json(
@@ -125,9 +125,10 @@ ${tasksSummary}
 
     // 使用 OpenAI 客户端（自动处理 API Key 和代理配置）
     const openai = await getOpenAIClient();
+    const modelToUse = model || await getOpenAIModel();
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: modelToUse,
       messages: [
         {
           role: 'user',
@@ -135,7 +136,7 @@ ${tasksSummary}
         },
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_completion_tokens: 2000,
     });
 
     const content = completion.choices[0]?.message?.content || '';

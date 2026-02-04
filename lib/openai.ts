@@ -149,11 +149,12 @@ const SYSTEM_PROMPT = `# Role: 任务提取与结构化助手
 /**
  * 从文本中提取任务
  * @param text 用户输入的文本
+ * @param model 可选的模型名称，如果不提供则使用配置的模型
  * @returns 提取的任务列表
  */
-export async function extractTasksFromText(text: string): Promise<ExtractedTask[]> {
+export async function extractTasksFromText(text: string, model?: string): Promise<ExtractedTask[]> {
   const client = await getOpenAIClient();
-  const model = await getOpenAIModel();
+  const modelToUse = model || await getOpenAIModel();
 
   // 获取当前日期作为相对时间的参考
   const currentDate = new Date().toISOString().split('T')[0];
@@ -166,7 +167,7 @@ ${text}`;
 
   try {
     const response = await client.chat.completions.create({
-      model,
+      model: modelToUse,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },

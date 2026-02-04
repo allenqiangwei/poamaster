@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     // 解析请求体
     const body = await request.json();
-    const { text } = body;
+    const { text, model } = body;
 
     // 验证输入
     if (!text || typeof text !== 'string') {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用 OpenAI 提取任务（会自动从数据库或环境变量读取 API Key）
-    const tasks = await extractTasksFromText(text);
+    const tasks = await extractTasksFromText(text, model);
 
     // 返回提取的任务
     return NextResponse.json({
