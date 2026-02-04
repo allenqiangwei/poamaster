@@ -9,8 +9,22 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  Paper,
+  Stepper,
+  Step,
+  StepLabel,
+  Divider,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
-import { ArrowBack as BackIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import {
+  ArrowBack as BackIcon,
+  Refresh as RefreshIcon,
+  ExpandMore as ExpandMoreIcon,
+  CheckCircle as CheckIcon,
+  HourglassEmpty as ProcessingIcon
+} from '@mui/icons-material';
 import DiscussionReport from '@/components/roundtable/DiscussionReport';
 
 export default function DiscussionDetailPage() {
@@ -122,9 +136,89 @@ export default function DiscussionDetailPage() {
       </Box>
 
       {discussion.status === 'processing' && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          讨论正在进行中，预计需要3-5分钟。您可以离开页面，完成后会收到飞书通知。
-        </Alert>
+        <>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            讨论正在进行中，预计需要3-5分钟。您可以离开页面，完成后会收到飞书通知。
+          </Alert>
+
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              讨论进展
+            </Typography>
+
+            <Stepper activeStep={discussion.rounds?.length || 0} orientation="vertical" sx={{ mt: 2 }}>
+              {[
+                { label: '回合1：澄清回合', description: '各角色提出澄清问题' },
+                { label: '回合2：质疑回合', description: '识别风险和数据缺失' },
+                { label: '回合3：反驳回合', description: '各角色提出反驳或替代方案' },
+                { label: '回合4：裁决回合', description: '主持人做出最终裁决' }
+              ].map((step, index) => {
+                const round = discussion.rounds?.find((r: any) => r.roundNumber === index + 1);
+                const isCompleted = !!round;
+                const isActive = index === (discussion.rounds?.length || 0);
+
+                return (
+                  <Step key={index} completed={isCompleted}>
+                    <StepLabel
+                      icon={isCompleted ? <CheckIcon color="success" /> : isActive ? <ProcessingIcon color="primary" /> : undefined}
+                    >
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={isActive ? 'bold' : 'normal'}>
+                          {step.label}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {step.description}
+                        </Typography>
+                      </Box>
+                    </StepLabel>
+                  </Step>
+                );
+              })}
+            </Stepper>
+
+            {/* 显示已完成的回合内容 */}
+            {discussion.rounds && discussion.rounds.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  已完成的回合
+                </Typography>
+                {discussion.rounds.map((round: any) => (
+                  <Accordion key={round.id} sx={{ mb: 1 }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CheckIcon color="success" fontSize="small" />
+                        <Typography>
+                          回合{round.roundNumber}：
+                          {round.roundType === 'clarify' && '澄清回合'}
+                          {round.roundType === 'question' && '质疑回合'}
+                          {round.roundType === 'rebuttal' && '反驳回合'}
+                          {round.roundType === 'verdict' && '裁决回合'}
+                        </Typography>
+                        <Chip label={`${round.messages?.length || 0}条消息`} size="small" />
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {round.messages?.map((message: any, idx: number) => (
+                        <Box key={message.id} sx={{ mb: 2 }}>
+                          {idx > 0 && <Divider sx={{ my: 2 }} />}
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            {message.roleName}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: 'pre-wrap', pl: 2, borderLeft: 2, borderColor: 'divider' }}
+                          >
+                            {message.content}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
+              </Box>
+            )}
+          </Paper>
+        </>
       )}
 
       {discussion.status === 'failed' && (
