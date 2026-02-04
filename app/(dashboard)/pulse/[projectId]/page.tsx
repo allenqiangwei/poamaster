@@ -34,6 +34,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { EntryDimension } from '@prisma/client';
 import { DIMENSION_LABELS, DIMENSION_ORDER, UNDO_WINDOW_MS } from '@/lib/pulse/constants';
+import ModelSelectionDialog from '@/components/ModelSelectionDialog';
 
 interface Entry {
   id: string;
@@ -87,6 +88,7 @@ export default function ProjectDetailPage() {
     message: '',
     severity: 'success'
   });
+  const [showSummaryModelDialog, setShowSummaryModelDialog] = useState(false);
 
   // Edit project
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -117,11 +119,18 @@ export default function ProjectDetailPage() {
     fetchProject();
   }, [fetchProject]);
 
-  const handleAISummary = async () => {
+  const handleAISummary = () => {
+    setShowSummaryModelDialog(true);
+  };
+
+  const handleSummaryModelConfirm = async (model: string) => {
+    setShowSummaryModelDialog(false);
     setSummaryLoading(true);
     try {
       const res = await fetch(`/api/pulse/projects/${projectId}/summary`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model })
       });
       const data = await res.json();
 
@@ -582,6 +591,13 @@ export default function ProjectDetailPage() {
             撤销
           </Button>
         }
+      />
+
+      {/* Model Selection Dialog for AI Summary */}
+      <ModelSelectionDialog
+        open={showSummaryModelDialog}
+        onClose={() => setShowSummaryModelDialog(false)}
+        onConfirm={handleSummaryModelConfirm}
       />
     </Box>
   );

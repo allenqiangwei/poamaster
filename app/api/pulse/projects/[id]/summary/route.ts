@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getOpenAIClient } from '@/lib/openai';
+import { getOpenAIClient, getOpenAIModel } from '@/lib/openai';
 import { sendFeishuTextMessage } from '@/lib/feishu';
 import { DIMENSION_LABELS } from '@/lib/pulse/constants';
 
@@ -11,6 +11,8 @@ export async function POST(
 ) {
   try {
     const { id: projectId } = await params;
+    const body = await request.json();
+    const { model } = body;
 
     // 获取项目和所有条目
     const project = await prisma.pulseProject.findUnique({
@@ -57,8 +59,9 @@ export async function POST(
     // 生成 AI 总结
     console.log('[Summary] Generating AI summary for project:', project.name);
     const client = await getOpenAIClient();
+    const modelToUse = model || await getOpenAIModel();
     const response = await client.chat.completions.create({
-      model: 'gpt-4o',
+      model: modelToUse,
       messages: [
         {
           role: 'system',
