@@ -75,7 +75,7 @@ class TaskQueue {
       throw new Error('Discussion or template not found');
     }
 
-    const engine = new DiscussionEngine(apiKey);
+    const engine = new DiscussionEngine();
     const context: DiscussionContext = {
       material: discussion.materialText,
       template: {

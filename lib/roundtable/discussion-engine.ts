@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
+import { getOpenAIClient, getOpenAIModel } from '@/lib/openai';
 
 const prisma = new PrismaClient();
 
@@ -58,10 +59,17 @@ export interface VerdictResult {
 }
 
 export class DiscussionEngine {
-  private openai: OpenAI;
+  private openai: OpenAI | null = null;
 
-  constructor(apiKey: string) {
-    this.openai = new OpenAI({ apiKey });
+  constructor() {
+    // OpenAI client will be initialized lazily using getOpenAIClient()
+  }
+
+  private async getClient(): Promise<OpenAI> {
+    if (!this.openai) {
+      this.openai = await getOpenAIClient();
+    }
+    return this.openai;
   }
 
   /**
@@ -69,9 +77,11 @@ export class DiscussionEngine {
    */
   async runClarifyRound(context: DiscussionContext): Promise<RoundResult> {
     const prompt = this.buildClarifyPrompt(context);
+    const client = await this.getClient();
+    const model = await getOpenAIModel();
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.7,
@@ -89,9 +99,11 @@ export class DiscussionEngine {
     clarifyResult: RoundResult
   ): Promise<RoundResult> {
     const prompt = this.buildQuestionPrompt(context, clarifyResult);
+    const client = await this.getClient();
+    const model = await getOpenAIModel();
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.7,
@@ -110,9 +122,11 @@ export class DiscussionEngine {
     roleName: string
   ): Promise<{ roleName: string; content: string }> {
     const prompt = this.buildRebuttalPrompt(context, previousRounds, roleName);
+    const client = await this.getClient();
+    const model = await getOpenAIModel();
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.8,
     });
@@ -131,9 +145,11 @@ export class DiscussionEngine {
     allRounds: RoundResult[]
   ): Promise<VerdictResult> {
     const prompt = this.buildVerdictPrompt(context, allRounds);
+    const client = await this.getClient();
+    const model = await getOpenAIModel();
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.6,

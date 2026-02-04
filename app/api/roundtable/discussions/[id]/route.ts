@@ -4,9 +4,12 @@ import { verifySession } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Next.js 15+ requires awaiting params
+    const { id } = await params;
+
     // 验证 Session
     const token = request.cookies.get('session')?.value;
     if (!token) {
@@ -19,7 +22,7 @@ export async function GET(
     }
 
     const discussion = await prisma.roundtableDiscussion.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         template: {
           include: {

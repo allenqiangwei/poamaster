@@ -5,11 +5,12 @@ const prisma = new PrismaClient();
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const template = await prisma.roundtableTemplate.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         roles: {
           orderBy: { order: 'asc' },
@@ -36,15 +37,16 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { roles, ...templateData } = body;
 
     // 更新模板
     const template = await prisma.roundtableTemplate.update({
-      where: { id: params.id },
+      where: { id },
       data: templateData,
     });
 
@@ -52,13 +54,13 @@ export async function PATCH(
     if (roles) {
       // 删除旧角色
       await prisma.roundtableRole.deleteMany({
-        where: { templateId: params.id },
+        where: { templateId: id },
       });
 
       // 创建新角色
       await prisma.roundtableRole.createMany({
         data: roles.map((role: any, index: number) => ({
-          templateId: params.id,
+          templateId: id,
           ...role,
           order: index + 1,
         })),
@@ -67,7 +69,7 @@ export async function PATCH(
 
     // 返回更新后的模板
     const updatedTemplate = await prisma.roundtableTemplate.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         roles: {
           orderBy: { order: 'asc' },

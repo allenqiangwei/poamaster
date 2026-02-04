@@ -6,17 +6,17 @@ const prisma = new PrismaClient();
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: actionId } = await params;
+
     // 使用自定义认证系统
     const token = request.cookies.get('session')?.value;
     const session = await verifySession(token);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const actionId = params.id;
 
     // 查找行动项
     const action = await prisma.roundtableAction.findUnique({
