@@ -1,4 +1,4 @@
-import { getOpenAIClient } from '@/lib/openai';
+import { getOpenAIClient, getOpenAIModel } from '@/lib/openai';
 import { EntryDimension, ReportType } from '@prisma/client';
 import { AIExtractionResult, AICandidate } from './types';
 import { DIMENSION_LABELS } from './constants';
@@ -45,9 +45,11 @@ export async function extractFromReport(
   projectName: string,
   reportType: ReportType,
   reportDate: string,
-  fileName: string
+  fileName: string,
+  model?: string
 ): Promise<AIExtractionResult> {
   const openai = await getOpenAIClient();
+  const modelToUse = model || await getOpenAIModel();
 
   const userPrompt = `## 报告信息
 - 项目: ${projectName}
@@ -62,7 +64,7 @@ ${parsedText.slice(0, 30000)}
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: modelToUse,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }

@@ -6,7 +6,7 @@ import { extractFromReport } from '@/lib/pulse/extractor';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { reportId } = body;
+    const { reportId, model } = body;
 
     if (!reportId) {
       return NextResponse.json(
@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
       report.project.name,
       report.reportType,
       report.reportDate.toISOString().split('T')[0],
-      report.fileName
+      report.fileName,
+      model || undefined
     );
 
     const session = await prisma.pulseAnalysisSession.create({

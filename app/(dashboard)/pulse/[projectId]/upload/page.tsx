@@ -21,6 +21,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import { ReportType } from '@prisma/client';
+import ModelSelectionDialog from '@/components/ModelSelectionDialog';
 
 const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   DAILY: '日报',
@@ -44,6 +45,9 @@ export default function UploadPage() {
   const [extracting, setExtracting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const [showModelDialog, setShowModelDialog] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('');
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -89,9 +93,15 @@ export default function UploadPage() {
       return;
     }
 
+    setError(null);
+    setShowModelDialog(true);
+  };
+
+  const handleModelConfirm = async (model: string) => {
+    setSelectedModel(model);
+    setShowModelDialog(false);
     setUploading(true);
     setProgress(10);
-    setError(null);
 
     try {
       // 如果是文本模式，创建虚拟 PDF 文件（实际上创建 txt 文件）
@@ -126,12 +136,12 @@ export default function UploadPage() {
       setUploading(false);
       setExtracting(true);
 
-      // Step 2: Extract with AI
+      // Step 2: Extract with AI (pass model parameter)
       const reportId = uploadData.data.id;
       const extractRes = await fetch('/api/pulse/analysis/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportId }),
+        body: JSON.stringify({ reportId, model }),
       });
       const extractData = await extractRes.json();
 
@@ -312,6 +322,13 @@ export default function UploadPage() {
           </Button>
         </Box>
       </Paper>
+
+      {/* Model Selection Dialog */}
+      <ModelSelectionDialog
+        open={showModelDialog}
+        onClose={() => setShowModelDialog(false)}
+        onConfirm={handleModelConfirm}
+      />
     </Box>
   );
 }
