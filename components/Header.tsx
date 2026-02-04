@@ -14,7 +14,8 @@ import {
   Home as HomeIcon,
   List as ListIcon,
   People as PeopleIcon,
-  Assessment as PulseIcon
+  Assessment as PulseIcon,
+  Forum as RoundtableIcon
 } from '@mui/icons-material';
 
 export default function Header() {
@@ -90,6 +91,16 @@ export default function Header() {
             }}
           >
             项目管理
+          </Button>
+          <Button
+            color="inherit"
+            startIcon={<RoundtableIcon />}
+            onClick={() => router.push('/roundtable')}
+            sx={{
+              bgcolor: pathname?.startsWith('/roundtable') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
+          >
+            圆桌会议
           </Button>
         </Box>
 
