@@ -15,9 +15,10 @@ import {
   IconButton,
 } from '@mui/material';
 import { CloudUpload as UploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import ModelSelectionDialog from '@/components/ModelSelectionDialog';
 
 interface MaterialInputProps {
-  onSubmit: (data: { title: string; materialText: string; files: File[] }) => void;
+  onSubmit: (data: { title: string; materialText: string; files: File[]; model?: string }) => void;
   loading?: boolean;
 }
 
@@ -27,6 +28,8 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<{ title: string; materialText: string; files: File[] } | null>(null);
 
   const validateFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -156,7 +159,17 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
     }
 
     setError('');
-    onSubmit({ title, materialText, files });
+    // 打开模型选择对话框
+    setPendingSubmit({ title, materialText, files });
+    setModelDialogOpen(true);
+  };
+
+  const handleModelConfirm = (model: string) => {
+    if (pendingSubmit) {
+      onSubmit({ ...pendingSubmit, model });
+      setPendingSubmit(null);
+    }
+    setModelDialogOpen(false);
   };
 
   return (
@@ -276,6 +289,14 @@ export default function MaterialInput({ onSubmit, loading }: MaterialInputProps)
       >
         {loading ? '提交中...' : '开始讨论'}
       </Button>
+
+      <ModelSelectionDialog
+        open={modelDialogOpen}
+        onClose={() => setModelDialogOpen(false)}
+        onConfirm={handleModelConfirm}
+        title="选择讨论模型"
+        description="选择用于圆桌讨论的 AI 模型。不同模型在推理能力、速度和成本上有所不同。"
+      />
     </Box>
   );
 }

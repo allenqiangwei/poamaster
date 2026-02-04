@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     const title = formData.get('title') as string;
     const templateId = formData.get('templateId') as string;
     const materialText = formData.get('materialText') as string || '';
+    const model = formData.get('model') as string | null;
     const files = formData.getAll('files') as File[];
 
     console.log('[Roundtable] Request data:', {
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
       templateId,
       materialTextLength: materialText.length,
       filesCount: files.length,
+      model: model || 'default',
     });
 
     if (!title || !templateId) {
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
         templateId,
         title,
         materialText,
+        model,
         status: 'processing',
       },
     });
@@ -118,6 +121,7 @@ export async function POST(request: NextRequest) {
     await taskQueue.enqueue({
       discussionId: discussion.id,
       apiKey: apiKey || process.env.OPENAI_API_KEY!,
+      model: model || undefined,
     });
     console.log('[Roundtable] Discussion enqueued successfully');
 

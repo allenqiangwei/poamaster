@@ -84,8 +84,7 @@ export class FileParser {
         pageCount: totalPages,
         metadata: {
           fileType: 'pdf',
-          fileName: file.name,
-          ocrUsed: true
+          fileName: file.name
         }
       };
     }

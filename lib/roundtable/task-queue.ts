@@ -51,6 +51,7 @@ function parseDeadline(deadlineStr: string | null | undefined): Date | null {
 interface QueueTask {
   discussionId: string;
   apiKey: string;
+  model?: string;
 }
 
 class TaskQueue {
@@ -74,7 +75,7 @@ class TaskQueue {
     const task = this.queue.shift()!;
 
     try {
-      await this.processDiscussion(task.discussionId, task.apiKey);
+      await this.processDiscussion(task.discussionId, task.apiKey, task.model);
     } catch (error) {
       console.error(`Failed to process discussion ${task.discussionId}:`, error);
 
@@ -92,7 +93,7 @@ class TaskQueue {
     setTimeout(() => this.processQueue(), 100);
   }
 
-  private async processDiscussion(discussionId: string, apiKey: string) {
+  private async processDiscussion(discussionId: string, apiKey: string, model?: string) {
     // 更新状态
     await prisma.roundtableDiscussion.update({
       where: { id: discussionId },
@@ -119,7 +120,7 @@ class TaskQueue {
       throw new Error('Discussion or template not found');
     }
 
-    const engine = new DiscussionEngine();
+    const engine = new DiscussionEngine(model);
     const context: DiscussionContext = {
       material: discussion.materialText,
       template: {

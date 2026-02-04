@@ -6,7 +6,6 @@ import {
   Card,
   CardContent,
   Typography,
-  Grid,
   CircularProgress,
   Alert,
 } from '@mui/material';
@@ -60,18 +59,18 @@ export default function TemplateSelector({ onSelect, selectedId }: TemplateSelec
   }
 
   return (
-    <Grid container spacing={2}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 2 }}>
       {templates.map((template) => (
-        <Grid item xs={12} sm={6} md={4} key={template.id}>
-          <Card
-            sx={{
-              cursor: 'pointer',
-              border: selectedId === template.id ? 2 : 0,
-              borderColor: 'primary.main',
-              '&:hover': { boxShadow: 3 },
-            }}
-            onClick={() => onSelect(template)}
-          >
+        <Card
+          key={template.id}
+          sx={{
+            cursor: 'pointer',
+            border: selectedId === template.id ? 2 : 0,
+            borderColor: 'primary.main',
+            '&:hover': { boxShadow: 3 },
+          }}
+          onClick={() => onSelect(template)}
+        >
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 {template.name}
@@ -91,9 +90,8 @@ export default function TemplateSelector({ onSelect, selectedId }: TemplateSelec
                 </Typography>
               )}
             </CardContent>
-          </Card>
-        </Grid>
+        </Card>
       ))}
-    </Grid>
+    </Box>
   );
 }

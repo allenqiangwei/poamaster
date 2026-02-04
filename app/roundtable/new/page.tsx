@@ -39,7 +39,7 @@ export default function NewDiscussionPage() {
     }
   };
 
-  const handleMaterialSubmit = async (data: { title: string; materialText: string; files: File[] }) => {
+  const handleMaterialSubmit = async (data: { title: string; materialText: string; files: File[]; model?: string }) => {
     if (mode === 'quick') {
       // 快速开始模式：先自动选择模板
       setAutoSelectLoading(true);
@@ -76,7 +76,7 @@ export default function NewDiscussionPage() {
     await createDiscussion(data);
   };
 
-  const createDiscussion = async (data: { title: string; materialText: string; files: File[] }) => {
+  const createDiscussion = async (data: { title: string; materialText: string; files: File[]; model?: string }) => {
     setSubmitLoading(true);
     setActiveStep(2);
 
@@ -85,6 +85,9 @@ export default function NewDiscussionPage() {
       formData.append('title', data.title);
       formData.append('templateId', selectedTemplate.id);
       formData.append('materialText', data.materialText);
+      if (data.model) {
+        formData.append('model', data.model);
+      }
       data.files.forEach(file => formData.append('files', file));
 
       const res = await fetch('/api/roundtable/discussions', {

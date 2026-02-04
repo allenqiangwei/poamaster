@@ -60,9 +60,11 @@ export interface VerdictResult {
 
 export class DiscussionEngine {
   private openai: OpenAI | null = null;
+  private customModel?: string;
 
-  constructor() {
+  constructor(model?: string) {
     // OpenAI client will be initialized lazily using getOpenAIClient()
+    this.customModel = model;
   }
 
   private async getClient(): Promise<OpenAI> {
@@ -72,13 +74,17 @@ export class DiscussionEngine {
     return this.openai;
   }
 
+  private async getModel(): Promise<string> {
+    return this.customModel || await getOpenAIModel();
+  }
+
   /**
    * 回合1：澄清回合（并行）
    */
   async runClarifyRound(context: DiscussionContext): Promise<RoundResult> {
     const prompt = this.buildClarifyPrompt(context);
     const client = await this.getClient();
-    const model = await getOpenAIModel();
+    const model = await this.getModel();
 
     const response = await client.chat.completions.create({
       model,
@@ -100,7 +106,7 @@ export class DiscussionEngine {
   ): Promise<RoundResult> {
     const prompt = this.buildQuestionPrompt(context, clarifyResult);
     const client = await this.getClient();
-    const model = await getOpenAIModel();
+    const model = await this.getModel();
 
     const response = await client.chat.completions.create({
       model,
@@ -123,7 +129,7 @@ export class DiscussionEngine {
   ): Promise<{ roleName: string; content: string }> {
     const prompt = this.buildRebuttalPrompt(context, previousRounds, roleName);
     const client = await this.getClient();
-    const model = await getOpenAIModel();
+    const model = await this.getModel();
 
     const response = await client.chat.completions.create({
       model,
@@ -146,7 +152,7 @@ export class DiscussionEngine {
   ): Promise<VerdictResult> {
     const prompt = this.buildVerdictPrompt(context, allRounds);
     const client = await this.getClient();
-    const model = await getOpenAIModel();
+    const model = await this.getModel();
 
     const response = await client.chat.completions.create({
       model,

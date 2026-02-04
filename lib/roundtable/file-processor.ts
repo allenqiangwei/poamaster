@@ -113,7 +113,7 @@ export class FileProcessor {
         console.log(`[FileProcessor] OCR processing page ${pageNum}/${pagesToProcess}`);
 
         // 渲染页面为图片
-        const imageBuffer = await renderPageAsImage(pdf, pageNum, { canvas: null });
+        const imageBuffer = await renderPageAsImage(pdf, pageNum);
 
         // 确保是 Buffer 类型
         const buffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer);

@@ -13,6 +13,10 @@ export async function POST(
 
     // 使用自定义认证系统
     const token = request.cookies.get('session')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const session = await verifySession(token);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
