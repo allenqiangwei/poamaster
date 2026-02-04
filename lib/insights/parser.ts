@@ -177,10 +177,11 @@ export class FileParser {
       const dataUrl = `data:${file.type};base64,${base64Image}`;
 
       // 使用 GPT-4 Vision API 提取图片中的文本
-      const { getOpenAIClient } = await import('@/lib/openai');
+      const { getOpenAIClient, getOpenAIModel } = await import('@/lib/openai');
       const client = await getOpenAIClient();
+      const model = await getOpenAIModel();
       const response = await client.chat.completions.create({
-        model: 'gpt-4o',
+        model,
         messages: [
           {
             role: 'user',
@@ -342,10 +343,11 @@ export class FileParser {
         const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
         // 使用 GPT-4 Vision API 提取图片中的文本
-        const { getOpenAIClient } = await import('@/lib/openai');
+        const { getOpenAIClient, getOpenAIModel } = await import('@/lib/openai');
         const client = await getOpenAIClient();
+        const model = await getOpenAIModel();
         const response = await client.chat.completions.create({
-          model: 'gpt-4o',
+          model,
           messages: [
             {
               role: 'user',

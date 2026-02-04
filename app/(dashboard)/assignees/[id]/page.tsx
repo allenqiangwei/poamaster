@@ -44,6 +44,7 @@ import {
   TextFields as TextFieldsIcon,
 } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
+import ModelSelectionDialog from '@/components/ModelSelectionDialog';
 
 interface Task {
   id: string;
@@ -131,6 +132,8 @@ function UploadDialog({
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [showModelDialog, setShowModelDialog] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('');
 
   const allowedTypes = ['.txt', '.pdf', '.docx', '.jpg', '.jpeg', '.png', '.webp'];
   const allowedMimeTypes = [
@@ -234,6 +237,12 @@ function UploadDialog({
       return;
     }
 
+    // 显示模型选择对话框
+    setShowModelDialog(true);
+  };
+
+  const handleModelConfirm = async (model: string) => {
+    setSelectedModel(model);
     setLoading(true);
     setError(null);
     setProgress(10);
@@ -271,7 +280,10 @@ function UploadDialog({
       const extractResponse = await fetch('/api/insights/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artifactId: uploadData.artifactId }),
+        body: JSON.stringify({
+          artifactId: uploadData.artifactId,
+          model: model
+        }),
       });
 
       const extractData = await extractResponse.json();
@@ -457,6 +469,14 @@ function UploadDialog({
           {loading ? '处理中...' : inputMode === 'file' ? '上传并提取' : '提交并提取'}
         </Button>
       </DialogActions>
+
+      <ModelSelectionDialog
+        open={showModelDialog}
+        onClose={() => setShowModelDialog(false)}
+        onConfirm={handleModelConfirm}
+        title="选择提取模型"
+        description="请选择用于提取对话内容的 GPT 模型"
+      />
     </Dialog>
   );
 }

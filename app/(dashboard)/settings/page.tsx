@@ -13,9 +13,19 @@ import {
   Box,
   Divider,
   Alert,
-  IconButton
+  IconButton,
+  FormControlLabel,
+  Checkbox,
+  CircularProgress,
+  Chip
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+
+interface OpenAIModel {
+  id: string;
+  created: number;
+  ownedBy: string;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -24,14 +34,19 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [configs, setConfigs] = useState({
     'openai.apiKey': '',
+    'openai.allowedModels': 'gpt-4o,gpt-4o-mini',
     'feishu.appId': '',
     'feishu.appSecret': '',
     'feishu.chatId': '',
     'feishu.enabled': 'true'
   });
+  const [availableModels, setAvailableModels] = useState<OpenAIModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsFallback, setModelsFallback] = useState(false);
 
   useEffect(() => {
     loadConfigs();
+    loadAvailableModels();
   }, []);
 
   const loadConfigs = async () => {
@@ -42,6 +57,42 @@ export default function SettingsPage() {
     } catch {
       setError('加载配置失败');
     }
+  };
+
+  const loadAvailableModels = async () => {
+    setLoadingModels(true);
+    try {
+      const res = await fetch('/api/openai/models', { credentials: 'include' });
+      const data = await res.json();
+      setAvailableModels(data.models || []);
+      setModelsFallback(data.fallback || false);
+    } catch (err) {
+      console.error('Failed to load models:', err);
+      // 使用备用模型列表
+      setAvailableModels([
+        { id: 'gpt-4o', created: 0, ownedBy: 'openai' },
+        { id: 'gpt-4o-mini', created: 0, ownedBy: 'openai' },
+        { id: 'gpt-4-turbo', created: 0, ownedBy: 'openai' },
+        { id: 'gpt-4', created: 0, ownedBy: 'openai' },
+        { id: 'gpt-3.5-turbo', created: 0, ownedBy: 'openai' },
+      ]);
+      setModelsFallback(true);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  const isModelAllowed = (modelId: string) => {
+    const allowedModels = configs['openai.allowedModels']?.split(',') || [];
+    return allowedModels.includes(modelId);
+  };
+
+  const toggleModel = (modelId: string) => {
+    const allowedModels = configs['openai.allowedModels']?.split(',').filter(Boolean) || [];
+    const newAllowed = isModelAllowed(modelId)
+      ? allowedModels.filter(id => id !== modelId)
+      : [...allowedModels, modelId];
+    setConfigs({ ...configs, 'openai.allowedModels': newAllowed.join(',') });
   };
 
   const handleSave = async () => {
@@ -97,9 +148,20 @@ export default function SettingsPage() {
       )}
 
       <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          OpenAI 配置
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6">
+            OpenAI 配置
+          </Typography>
+          <Button
+            size="small"
+            startIcon={loadingModels ? <CircularProgress size={16} /> : <RefreshIcon />}
+            onClick={loadAvailableModels}
+            disabled={loadingModels}
+          >
+            刷新模型列表
+          </Button>
+        </Box>
+
         <TextField
           label="API 密钥"
           fullWidth
@@ -111,6 +173,65 @@ export default function SettingsPage() {
           }
           helperText="用于 AI 任务提取功能"
         />
+
+        <Box sx={{ mt: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Typography variant="subtitle1">
+              允许使用的模型
+            </Typography>
+            {modelsFallback && (
+              <Chip
+                label="使用备用列表"
+                size="small"
+                color="warning"
+                variant="outlined"
+              />
+            )}
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            勾选您允许在 AI 提取时使用的模型。执行提取时会弹窗让您选择具体使用哪个模型。
+          </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="caption">
+              💡 提示：只显示支持聊天功能的模型（gpt-4o、gpt-4-turbo、gpt-3.5-turbo 等）。
+              如果看到不熟悉的模型，建议只选择常用的 GPT 模型。
+            </Typography>
+          </Alert>
+
+          {loadingModels ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {availableModels.length === 0 ? (
+                <Alert severity="warning">
+                  无法加载模型列表。请检查 API 密钥配置或网络连接。
+                </Alert>
+              ) : (
+                availableModels.map((model) => (
+                  <FormControlLabel
+                    key={model.id}
+                    control={
+                      <Checkbox
+                        checked={isModelAllowed(model.id)}
+                        onChange={() => toggleModel(model.id)}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body1">{model.id}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {model.ownedBy}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                ))
+              )}
+            </Box>
+          )}
+        </Box>
       </Paper>
 
       <Paper sx={{ p: 3, mt: 3 }}>

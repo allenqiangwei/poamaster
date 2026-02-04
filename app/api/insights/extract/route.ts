@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Parse request body
     const body = await request.json();
-    const { artifactId } = body;
+    const { artifactId, model } = body;
 
     if (!artifactId || typeof artifactId !== 'string') {
       return NextResponse.json(
@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Model is optional, will use configured default if not provided
+    const selectedModel = model || undefined;
 
     // Validate CUID format
     if (!/^c[a-z0-9]{24}$/.test(artifactId)) {
@@ -93,7 +96,7 @@ export async function POST(request: NextRequest) {
       const parseResult = await parser.parseFromPath(fullPath);
 
       // 6. Extract items using InsightsExtractor
-      const extractResult = await extractor.extract(parseResult.text);
+      const extractResult = await extractor.extract(parseResult.text, selectedModel);
 
       // 7. TODO: Deduplicate items (Task 6 bonus - can skip for MVP)
       // For now, use items as-is

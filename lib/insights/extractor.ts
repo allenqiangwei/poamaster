@@ -20,8 +20,10 @@ export class InsightsExtractor {
 
   /**
    * 从文本中提取 insights
+   * @param text 输入文本
+   * @param model 可选的模型名称，如果不提供则使用配置的模型
    */
-  async extract(text: string): Promise<ExtractionResult> {
+  async extract(text: string, model?: string): Promise<ExtractionResult> {
     // Add validation at the start
     if (typeof text !== 'string') {
       throw new Error('输入文本不能为空');
@@ -33,7 +35,7 @@ export class InsightsExtractor {
         items: [],
         metadata: {
           strategy: 'single',
-          modelName: EXTRACTION_CONFIG.MODEL_NAME,
+          modelName: model || EXTRACTION_CONFIG.MODEL_NAME,
           latencyMs: 0,
         },
       };
@@ -45,9 +47,9 @@ export class InsightsExtractor {
     let items: DraftItemData[];
 
     if (isShortText) {
-      items = await this.extractSinglePass(text);
+      items = await this.extractSinglePass(text, model);
     } else {
-      items = await this.extractChunked(text);
+      items = await this.extractChunked(text, model);
     }
 
     const latencyMs = Date.now() - startTime;
@@ -56,7 +58,7 @@ export class InsightsExtractor {
       items,
       metadata: {
         strategy: isShortText ? 'single' : 'chunked',
-        modelName: EXTRACTION_CONFIG.MODEL_NAME,
+        modelName: model || EXTRACTION_CONFIG.MODEL_NAME,
         latencyMs,
       },
     };
@@ -65,12 +67,13 @@ export class InsightsExtractor {
   /**
    * 单次提取（适用于短文本）
    */
-  private async extractSinglePass(text: string): Promise<DraftItemData[]> {
+  private async extractSinglePass(text: string, model?: string): Promise<DraftItemData[]> {
     const client = await this.getClient();
+    const modelToUse = model || EXTRACTION_CONFIG.MODEL_NAME;
 
     try {
       const response = await client.chat.completions.create({
-        model: EXTRACTION_CONFIG.MODEL_NAME,
+        model: modelToUse,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: buildExtractionPrompt(text) },
@@ -115,6 +118,13 @@ export class InsightsExtractor {
         if (error.message.includes('timeout') || error.message.includes('timed out')) {
           throw new Error('请求超时。请稍后重试或检查网络连接');
         }
+        // 模型不支持错误
+        if (error.message.includes('not a chat model') || error.message.includes('not supported in the v1/chat/completions')) {
+          throw new Error('所选模型不支持聊天功能。请在设置中选择有效的聊天模型（如 gpt-4o, gpt-4-turbo 等）');
+        }
+        if (error.message.includes('model_not_found') || error.message.includes('The model') && error.message.includes('does not exist')) {
+          throw new Error('所选模型不存在或已不可用。请在设置中刷新模型列表并选择有效的模型');
+        }
         throw new Error(`提取失败: ${error.message}`);
       }
       throw new Error('提取失败: 未知错误');
@@ -124,13 +134,13 @@ export class InsightsExtractor {
   /**
    * 分块提取（适用于长文本）
    */
-  private async extractChunked(text: string): Promise<DraftItemData[]> {
+  private async extractChunked(text: string, model?: string): Promise<DraftItemData[]> {
     // 1. 分块
     const chunks = this.chunkText(text, EXTRACTION_CONFIG.CHUNK_SIZE);
 
     // 2. 并行提取
     const chunkResults = await Promise.all(
-      chunks.map(chunk => this.extractSinglePass(chunk))
+      chunks.map(chunk => this.extractSinglePass(chunk, model))
     );
 
     // 3. 合并所有结果
@@ -153,7 +163,7 @@ export class InsightsExtractor {
         mergedItems.push(...items);
       } else {
         // 多条目，调用 merge
-        const merged = await this.mergeItems(items, dimension);
+        const merged = await this.mergeItems(items, dimension, model);
         mergedItems.push(...merged);
       }
     }
@@ -166,9 +176,11 @@ export class InsightsExtractor {
    */
   private async mergeItems(
     items: DraftItemData[],
-    dimension: Dimension
+    dimension: Dimension,
+    model?: string
   ): Promise<DraftItemData[]> {
     const client = await this.getClient();
+    const modelToUse = model || EXTRACTION_CONFIG.MODEL_NAME;
 
     try {
       // 构建合并提示
@@ -180,7 +192,7 @@ export class InsightsExtractor {
       );
 
       const response = await client.chat.completions.create({
-        model: EXTRACTION_CONFIG.MODEL_NAME,
+        model: modelToUse,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: mergePrompt },

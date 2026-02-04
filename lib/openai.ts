@@ -2,6 +2,15 @@ import OpenAI from 'openai';
 import { getConfig } from './config';
 import { ProxyAgent } from 'undici';
 
+/**
+ * 获取配置的 OpenAI 模型
+ * @returns 配置的模型名称，默认为 gpt-4o
+ */
+export async function getOpenAIModel(): Promise<string> {
+  const configuredModel = await getConfig('openai.model');
+  return configuredModel || 'gpt-4o';
+}
+
 // 提取的任务接口
 export interface ExtractedTask {
   title: string;
@@ -144,6 +153,7 @@ const SYSTEM_PROMPT = `# Role: 任务提取与结构化助手
  */
 export async function extractTasksFromText(text: string): Promise<ExtractedTask[]> {
   const client = await getOpenAIClient();
+  const model = await getOpenAIModel();
 
   // 获取当前日期作为相对时间的参考
   const currentDate = new Date().toISOString().split('T')[0];
@@ -156,7 +166,7 @@ ${text}`;
 
   try {
     const response = await client.chat.completions.create({
-      model: 'gpt-4o',
+      model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
