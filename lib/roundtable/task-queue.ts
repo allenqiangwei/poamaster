@@ -4,6 +4,50 @@ import { sendFeishuNotification } from '../feishu';
 
 const prisma = new PrismaClient();
 
+/**
+ * 解析 AI 返回的 deadline 字符串为 Date 对象
+ * 支持：ISO 日期格式、中文相对时间描述（如"2周内"、"1个月内"）
+ */
+function parseDeadline(deadlineStr: string | null | undefined): Date | null {
+  if (!deadlineStr || deadlineStr.trim() === '') {
+    return null;
+  }
+
+  // 尝试直接解析 ISO 格式或标准日期格式
+  const parsedDate = new Date(deadlineStr);
+  if (!isNaN(parsedDate.getTime())) {
+    return parsedDate;
+  }
+
+  // 解析中文相对时间描述
+  const now = new Date();
+
+  // 匹配 "X天内"、"X周内"、"X个月内"
+  const dayMatch = deadlineStr.match(/(\d+)\s*天/);
+  if (dayMatch) {
+    const days = parseInt(dayMatch[1], 10);
+    return new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  const weekMatch = deadlineStr.match(/(\d+)\s*周/);
+  if (weekMatch) {
+    const weeks = parseInt(weekMatch[1], 10);
+    return new Date(now.getTime() + weeks * 7 * 24 * 60 * 60 * 1000);
+  }
+
+  const monthMatch = deadlineStr.match(/(\d+)\s*个?月/);
+  if (monthMatch) {
+    const months = parseInt(monthMatch[1], 10);
+    const futureDate = new Date(now);
+    futureDate.setMonth(futureDate.getMonth() + months);
+    return futureDate;
+  }
+
+  // 无法解析，返回 null
+  console.warn(`[TaskQueue] Cannot parse deadline: "${deadlineStr}", setting to null`);
+  return null;
+}
+
 interface QueueTask {
   discussionId: string;
   apiKey: string;
@@ -164,7 +208,7 @@ class TaskQueue {
           discussionId,
           content: a.content,
           assignee: a.assignee,
-          deadline: a.deadline ? new Date(a.deadline) : null,
+          deadline: parseDeadline(a.deadline),
           acceptanceCriteria: a.acceptanceCriteria,
           priority: a.priority,
         })),
