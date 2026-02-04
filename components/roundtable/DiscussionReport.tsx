@@ -19,6 +19,7 @@ import {
   Download as DownloadIcon,
   Send as SendIcon,
   Task as TaskIcon,
+  FormatQuote as QuoteIcon,
 } from '@mui/icons-material';
 
 interface DiscussionReportProps {
@@ -26,6 +27,85 @@ interface DiscussionReportProps {
   onExportPDF?: () => void;
   onSendToFeishu?: () => void;
   onCreateTask?: (actionId: string) => void;
+}
+
+/**
+ * 高亮显示文本中的引用内容
+ * 检测以下模式：
+ * - "材料中提到..."、"材料显示..."、"根据材料..."
+ * - 引号中的文本（可能是直接引用）
+ */
+function highlightCitations(text: string): React.ReactNode {
+  if (!text) return text;
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  // 匹配引用模式：材料中提到、材料显示、根据材料等
+  const citationPattern = /(材料中提到|材料显示|材料中|根据材料|材料提及)([^。！？]*[。！？])/g;
+
+  // 先处理明确的引用模式
+  let match;
+  const matches: Array<{ start: number; end: number; text: string }> = [];
+
+  while ((match = citationPattern.exec(text)) !== null) {
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      text: match[0]
+    });
+  }
+
+  // 如果找到引用，添加高亮
+  if (matches.length > 0) {
+    matches.forEach((m, idx) => {
+      // 添加引用前的普通文本
+      if (m.start > lastIndex) {
+        parts.push(
+          <span key={`text-${idx}`}>
+            {text.substring(lastIndex, m.start)}
+          </span>
+        );
+      }
+
+      // 添加高亮的引用文本
+      parts.push(
+        <Box
+          component="span"
+          key={`citation-${idx}`}
+          sx={{
+            bgcolor: 'warning.light',
+            px: 0.5,
+            py: 0.25,
+            borderRadius: 0.5,
+            fontWeight: 'medium',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <QuoteIcon sx={{ fontSize: 14, color: 'warning.dark' }} />
+          {m.text}
+        </Box>
+      );
+
+      lastIndex = m.end;
+    });
+
+    // 添加最后剩余的文本
+    if (lastIndex < text.length) {
+      parts.push(
+        <span key="text-end">
+          {text.substring(lastIndex)}
+        </span>
+      );
+    }
+
+    return <>{parts}</>;
+  }
+
+  // 如果没有找到引用模式，返回原文
+  return text;
 }
 
 export default function DiscussionReport({
@@ -64,8 +144,8 @@ export default function DiscussionReport({
             color={getConclusionColor(discussion.conclusionType)}
           />
         </Box>
-        <Typography variant="body1">
-          {discussion.conclusion}
+        <Typography variant="body1" component="div">
+          {highlightCitations(discussion.conclusion)}
         </Typography>
       </Paper>
 
@@ -93,7 +173,7 @@ export default function DiscussionReport({
                 }
               >
                 <ListItemText
-                  primary={action.content}
+                  primary={<Box component="div">{highlightCitations(action.content)}</Box>}
                   secondary={
                     <Box component="span">
                       {action.assignee && `负责人：${action.assignee} | `}
@@ -127,17 +207,19 @@ export default function DiscussionReport({
                         size="small"
                         color={risk.priority === 'high' ? 'error' : risk.priority === 'medium' ? 'warning' : 'default'}
                       />
-                      <Typography variant="body2">{risk.description}</Typography>
+                      <Typography variant="body2" component="div">
+                        {highlightCitations(risk.description)}
+                      </Typography>
                     </Box>
                   }
                   secondary={
-                    <Box component="span">
-                      <Typography variant="caption" display="block">
-                        影响：{risk.impact}
+                    <Box component="div">
+                      <Typography variant="caption" display="block" component="div">
+                        影响：{highlightCitations(risk.impact)}
                       </Typography>
                       {risk.mitigation && (
-                        <Typography variant="caption" display="block">
-                          缓解：{risk.mitigation}
+                        <Typography variant="caption" display="block" component="div">
+                          缓解：{highlightCitations(risk.mitigation)}
                         </Typography>
                       )}
                     </Box>
@@ -170,8 +252,8 @@ export default function DiscussionReport({
                   <Typography variant="subtitle2" color="primary.main">
                     {message.roleName}
                   </Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>
-                    {message.content}
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 1 }} component="div">
+                    {highlightCitations(message.content)}
                   </Typography>
                   <Divider sx={{ mt: 2 }} />
                 </Box>
@@ -192,8 +274,12 @@ export default function DiscussionReport({
               {discussion.assumptions.map((assumption: any) => (
                 <ListItem key={assumption.id}>
                   <ListItemText
-                    primary={assumption.description}
-                    secondary={`置信度：${assumption.confidence} | 依据：${assumption.reasoning}`}
+                    primary={<Box component="div">{highlightCitations(assumption.description)}</Box>}
+                    secondary={
+                      <Box component="div">
+                        置信度：{assumption.confidence} | 依据：{highlightCitations(assumption.reasoning)}
+                      </Box>
+                    }
                   />
                 </ListItem>
               ))}
@@ -207,8 +293,8 @@ export default function DiscussionReport({
           <Typography>决策依据</Typography>
         </AccordionSummary>
         <AccordionDetails>
-          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-            {discussion.decisionReasoning}
+          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }} component="div">
+            {highlightCitations(discussion.decisionReasoning)}
           </Typography>
         </AccordionDetails>
       </Accordion>
