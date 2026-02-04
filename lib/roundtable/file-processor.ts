@@ -3,13 +3,16 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { getOpenAIClient } from '@/lib/openai';
 import type OpenAI from 'openai';
+import { SmartOCR } from '@/lib/ocr/smart-ocr';
 
 export class FileProcessor {
   private openai: OpenAI | null = null;
   private uploadDir: string;
+  private smartOCR: SmartOCR;
 
   constructor() {
     this.uploadDir = join(process.cwd(), 'public', 'uploads', 'roundtable');
+    this.smartOCR = new SmartOCR();
   }
 
   private async getClient(): Promise<OpenAI> {
@@ -209,47 +212,19 @@ export class FileProcessor {
   }
 
   /**
-   * 使用 OpenAI Vision 从图片提取文本
+   * 使用智能 OCR 从图片提取文本
+   * 自动选择最佳识别方案（本地 PaddleOCR 或 GPT-4 Vision）
    */
   private async extractTextFromImage(buffer: Buffer, mimeType: string): Promise<string> {
     try {
-      const base64Image = buffer.toString('base64');
-      const dataUrl = `data:${mimeType};base64,${base64Image}`;
+      const result = await this.smartOCR.extractWithBestMethod(buffer, mimeType);
 
-      const client = await this.getClient();
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `请提取这个文件中的所有文字内容。如果有表格，请转换为Markdown格式。如果有图表，请详细描述图表内容和数据。
+      console.log(`[FileProcessor] Image OCR completed using ${result.method}`);
+      if (result.hasCharts) {
+        console.log('[FileProcessor] Image contains charts, used hybrid approach');
+      }
 
-要求：
-1. 完整提取所有文字
-2. 表格转换为Markdown table格式
-3. 图表提供详细描述
-4. 提取关键数据点
-5. 保持原有结构和层次
-
-输出格式：纯文本，直接输出提取的内容，不要额外说明。`,
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: dataUrl,
-                  detail: 'high',
-                },
-              },
-            ],
-          },
-        ],
-        max_completion_tokens: 4000,
-      });
-
-      return response.choices[0]?.message?.content || '';
+      return result.text;
     } catch (error) {
       console.error('Failed to extract text from image:', error);
       if (error instanceof Error) {

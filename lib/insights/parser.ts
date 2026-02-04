@@ -1,8 +1,14 @@
 // lib/insights/parser.ts
 
 import { ParseResult } from './types';
+import { SmartOCR } from '@/lib/ocr/smart-ocr';
 
 export class FileParser {
+  private smartOCR: SmartOCR;
+
+  constructor() {
+    this.smartOCR = new SmartOCR();
+  }
   async parse(file: File): Promise<ParseResult> {
     const fileType = this.detectFileType(file);
 
@@ -172,73 +178,18 @@ export class FileParser {
   private async parseImage(file: File): Promise<ParseResult> {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const base64Image = Buffer.from(arrayBuffer).toString('base64');
-      const dataUrl = `data:${file.type};base64,${base64Image}`;
+      const buffer = Buffer.from(arrayBuffer);
 
-      // 使用 GPT-4 Vision API 提取图片中的文本
-      const { getOpenAIClient, getOpenAIModel } = await import('@/lib/openai');
-      const client = await getOpenAIClient();
-      const model = await getOpenAIModel();
-      const response = await client.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `# 任务：OCR文本提取
+      // 使用智能 OCR 自动选择最佳识别方案
+      console.log('[Parser] Processing image with SmartOCR...');
+      const result = await this.smartOCR.extractWithBestMethod(buffer, file.type);
 
-请仔细分析这张图片，提取其中的所有文本内容。这是一段对话记录的截图。
+      console.log(`[Parser] Image OCR completed using ${result.method}`);
+      if (result.hasCharts) {
+        console.log('[Parser] Image contains charts');
+      }
 
-## 提取要求：
-
-1. **完整性**：提取图片中的每一个字符，包括：
-   - 对话内容（消息文本）
-   - 用户名/昵称
-   - 时间戳
-   - 系统提示
-   - 表情符号和特殊字符
-
-2. **格式保持**：
-   - 保持原始的段落结构
-   - 保持对话的顺序（从上到下，从左到右）
-   - 用空行分隔不同的消息
-   - 保持缩进和对齐关系
-
-3. **对话结构**：
-   - 如果能识别出发言人，用 [用户名] 标注
-   - 如果有时间信息，保留时间信息
-   - 保持对话的上下文关系
-
-4. **处理原则**：
-   - 逐行仔细扫描，不遗漏任何文字
-   - 如果文字模糊但可以推断，标注 [可能是：XX]
-   - 如果完全无法识别，标注 [无法识别的文字]
-   - 保持原文语言（中文/英文等）
-
-5. **特殊注意**：
-   - 仔细识别小字、淡色字、背景文字
-   - 注意截图边缘可能被裁切的文字
-   - 识别可能的表情符号、emoji
-   - 不要添加不存在的内容，不要总结或概括
-
-请开始提取：`
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: dataUrl,
-                  detail: 'high' // 使用高细节模式以获得更好的文字识别
-                }
-              }
-            ]
-          }
-        ],
-        max_completion_tokens: 4096
-      });
-
-      const text = response.choices[0]?.message?.content || '';
+      const text = result.text;
 
       if (!text || text.trim().length === 0) {
         throw new Error('图片中未识别到文本内容');
