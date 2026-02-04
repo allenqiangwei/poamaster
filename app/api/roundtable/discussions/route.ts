@@ -177,6 +177,18 @@ export async function GET(request: NextRequest) {
           template: true,
           actions: true,
           risks: { where: { priority: 'high' } },
+          rounds: {
+            orderBy: { roundNumber: 'desc' },
+            take: 1, // 只取最新的一轮用于显示进度
+            select: {
+              roundNumber: true,
+              roundType: true,
+              createdAt: true,
+            },
+          },
+          _count: {
+            select: { rounds: true }, // 统计总轮数
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,

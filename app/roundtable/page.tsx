@@ -32,6 +32,34 @@ export default function RoundtablePage() {
   });
   const [deleting, setDeleting] = useState(false);
 
+  // 格式化处理进度
+  const getProgressText = (discussion: any): string => {
+    if (discussion.status === 'completed') return '已完成';
+    if (discussion.status === 'failed') return '失败';
+
+    // 处理中状态：显示当前轮次
+    const roundsCount = discussion._count?.rounds || 0;
+    const latestRound = discussion.rounds?.[0];
+
+    if (roundsCount === 0) {
+      return '准备中...';
+    }
+
+    const roundNames: Record<string, string> = {
+      'clarify': '第1轮：澄清理解',
+      'question': '第2轮：质疑挑战',
+      'rebuttal': '第3轮：反驳辩护',
+      'verdict': '第4轮：最终判决',
+    };
+
+    if (latestRound) {
+      const name = roundNames[latestRound.roundType] || `第${roundsCount}轮`;
+      return `${name}...`;
+    }
+
+    return `第${roundsCount}/4轮`;
+  };
+
   useEffect(() => {
     fetchDiscussions();
   }, []);
@@ -137,7 +165,7 @@ export default function RoundtablePage() {
                   <Typography variant="h6">{discussion.title}</Typography>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                     <Chip
-                      label={discussion.status === 'completed' ? '已完成' : discussion.status === 'processing' ? '处理中' : '失败'}
+                      label={getProgressText(discussion)}
                       size="small"
                       color={discussion.status === 'completed' ? 'success' : discussion.status === 'processing' ? 'primary' : 'error'}
                     />
