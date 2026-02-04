@@ -58,11 +58,9 @@ export class FileProcessor {
    * 提取文本（根据文件类型选择不同的方法）
    */
   private async extractText(buffer: Buffer, mimeType: string): Promise<string> {
-    // PDF 文件：暂不支持 OCR，直接返回空字符串
-    // TODO: 未来可以集成 PDF 解析库或使用其他 API
+    // PDF 文件：使用 unpdf 提取文本，如果是图片型 PDF 则使用 OCR
     if (mimeType === 'application/pdf') {
-      console.warn('[FileProcessor] PDF OCR not yet implemented, skipping text extraction');
-      return '[PDF文件已上传，但暂不支持自动文本提取。请在材料内容中手动输入关键信息]';
+      return this.extractTextFromPdf(buffer);
     }
 
     // 图片文件：使用 Vision API
@@ -71,7 +69,102 @@ export class FileProcessor {
     }
 
     // 其他文件类型
-    throw new Error(`不支持的文件类型: ${mimeType}。当前仅支持图片格式`);
+    throw new Error(`不支持的文件类型: ${mimeType}。当前仅支持图片和PDF格式`);
+  }
+
+  /**
+   * 从 PDF 提取文本
+   */
+  private async extractTextFromPdf(buffer: Buffer): Promise<string> {
+    try {
+      const { extractText, getDocumentProxy, renderPageAsImage } = await import('unpdf');
+      const uint8Buffer = new Uint8Array(buffer);
+      const pdf = await getDocumentProxy(uint8Buffer);
+      const { totalPages, text } = await extractText(pdf, { mergePages: true });
+
+      // 如果提取的文本为空，说明是图片型 PDF，使用 OCR
+      if (!text || text.trim().length === 0) {
+        console.log('[FileProcessor] PDF has no embedded text, using OCR for', totalPages, 'pages');
+        return await this.performPdfOcr(pdf, totalPages);
+      }
+
+      console.log('[FileProcessor] Successfully extracted text from PDF:', text.length, 'characters');
+      return text;
+    } catch (error) {
+      console.error('[FileProcessor] Failed to extract text from PDF:', error);
+      throw new Error('PDF 文本提取失败。请确保 PDF 文件有效，或尝试将其转换为图片格式');
+    }
+  }
+
+  /**
+   * 使用 OCR 处理图片型 PDF
+   */
+  private async performPdfOcr(pdf: any, totalPages: number): Promise<string> {
+    const { renderPageAsImage } = await import('unpdf');
+    const client = await this.getClient();
+
+    const pageTexts: string[] = [];
+
+    // 限制最多处理前 10 页（避免成本过高和超时）
+    const pagesToProcess = Math.min(totalPages, 10);
+
+    for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
+      try {
+        console.log(`[FileProcessor] OCR processing page ${pageNum}/${pagesToProcess}`);
+
+        // 渲染页面为图片
+        const imageBuffer = await renderPageAsImage(pdf, pageNum, { canvas: null });
+
+        // 确保是 Buffer 类型
+        const buffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer);
+        const base64Image = buffer.toString('base64');
+        const dataUrl = `data:image/png;base64,${base64Image}`;
+
+        // 使用 GPT-4 Vision API 提取文本
+        const response = await client.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `请仔细提取这个 PDF 页面（第 ${pageNum} 页）中的所有文本内容。
+
+要求：
+- 提取所有可见文字，保持原始格式和段落
+- 如果是表格，保持表格结构
+- 如果是列表，保持列表格式
+- 不要添加解释或总结，只提取原始文字`,
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: dataUrl,
+                    detail: 'high',
+                  },
+                },
+              ],
+            },
+          ],
+          max_completion_tokens: 4096,
+        });
+
+        const pageText = response.choices[0]?.message?.content || '';
+        if (pageText.trim().length > 0) {
+          pageTexts.push(`\n--- 第 ${pageNum} 页 ---\n${pageText}`);
+        }
+      } catch (error) {
+        console.error(`[FileProcessor] OCR failed for page ${pageNum}:`, error);
+        pageTexts.push(`\n--- 第 ${pageNum} 页 ---\n[OCR 识别失败]`);
+      }
+    }
+
+    if (totalPages > pagesToProcess) {
+      pageTexts.push(`\n\n[注：PDF 共 ${totalPages} 页，已处理前 ${pagesToProcess} 页]`);
+    }
+
+    return pageTexts.join('\n');
   }
 
   /**
