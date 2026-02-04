@@ -17,6 +17,13 @@ import { CheckBox as TodoIcon, Assessment as PulseIcon, Forum as RoundtableIcon 
 export default function HomePage() {
   const router = useRouter();
 
+  console.log('[HomePage] Rendered, router:', router);
+
+  const handleNavigate = (path: string) => {
+    console.log('[HomePage] Navigating to:', path);
+    router.push(path);
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" gutterBottom>
@@ -52,7 +59,7 @@ export default function HomePage() {
               size="small"
               variant="contained"
               fullWidth
-              onClick={() => router.push('/todo')}
+              onClick={() => handleNavigate('/todo')}
             >
               进入工具
             </Button>
@@ -76,7 +83,7 @@ export default function HomePage() {
               size="small"
               variant="contained"
               fullWidth
-              onClick={() => router.push('/pulse')}
+              onClick={() => handleNavigate('/pulse')}
             >
               进入工具
             </Button>
@@ -100,7 +107,7 @@ export default function HomePage() {
               size="small"
               variant="contained"
               fullWidth
-              onClick={() => router.push('/roundtable')}
+              onClick={() => handleNavigate('/roundtable')}
             >
               进入工具
             </Button>
