@@ -160,32 +160,55 @@ export default function DiscussionReport({
             {discussion.actions?.map((action: any) => (
               <ListItem
                 key={action.id}
-                secondaryAction={
-                  !action.taskId && onCreateTask && (
-                    <Button
-                      size="small"
-                      startIcon={<TaskIcon />}
-                      onClick={() => onCreateTask(action.id)}
-                    >
-                      创建任务
-                    </Button>
-                  )
-                }
+                sx={{
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  py: 2,
+                }}
               >
-                <ListItemText
-                  primary={<Box component="div">{highlightCitations(action.content)}</Box>}
-                  secondary={
-                    <Box component="span">
-                      {action.assignee && `负责人：${action.assignee} | `}
-                      {action.deadline && `截止：${new Date(action.deadline).toLocaleDateString('zh-CN')} | `}
-                      <Chip
-                        label={action.priority}
+                <Box sx={{ width: '100%' }}>
+                  <Typography variant="body1" gutterBottom component="div">
+                    {highlightCitations(action.content)}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1, flexWrap: 'wrap' }}>
+                    <Chip
+                      label={action.priority}
+                      size="small"
+                      color={action.priority === 'high' ? 'error' : action.priority === 'medium' ? 'warning' : 'default'}
+                    />
+                    {action.assignee && (
+                      <Typography variant="caption" color="text.secondary">
+                        负责人：{action.assignee}
+                      </Typography>
+                    )}
+                    {action.deadline && (
+                      <Typography variant="caption" color="text.secondary">
+                        截止：{new Date(action.deadline).toLocaleDateString('zh-CN')}
+                      </Typography>
+                    )}
+                    {!action.taskId && onCreateTask && (
+                      <Button
                         size="small"
-                        color={action.priority === 'high' ? 'error' : action.priority === 'medium' ? 'warning' : 'default'}
+                        variant="outlined"
+                        startIcon={<TaskIcon />}
+                        onClick={() => onCreateTask(action.id)}
+                        sx={{ ml: 'auto' }}
+                      >
+                        创建任务
+                      </Button>
+                    )}
+                    {action.taskId && (
+                      <Chip
+                        label="已创建任务"
+                        size="small"
+                        color="success"
+                        sx={{ ml: 'auto' }}
                       />
-                    </Box>
-                  }
-                />
+                    )}
+                  </Box>
+                </Box>
               </ListItem>
             ))}
           </List>
@@ -198,33 +221,38 @@ export default function DiscussionReport({
           </Typography>
           <List>
             {discussion.risks?.map((risk: any) => (
-              <ListItem key={risk.id}>
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip
-                        label={risk.priority}
-                        size="small"
-                        color={risk.priority === 'high' ? 'error' : risk.priority === 'medium' ? 'warning' : 'default'}
-                      />
-                      <Typography variant="body2" component="div">
-                        {highlightCitations(risk.description)}
+              <ListItem
+                key={risk.id}
+                sx={{
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  py: 2,
+                }}
+              >
+                <Box sx={{ width: '100%' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                    <Chip
+                      label={risk.priority}
+                      size="small"
+                      color={risk.priority === 'high' ? 'error' : risk.priority === 'medium' ? 'warning' : 'default'}
+                    />
+                    <Typography variant="body1" component="div" sx={{ flex: 1 }}>
+                      {highlightCitations(risk.description)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ pl: 2, borderLeft: 2, borderColor: 'divider', mt: 1 }}>
+                    <Typography variant="body2" color="text.secondary" gutterBottom component="div">
+                      <strong>影响：</strong>{highlightCitations(risk.impact)}
+                    </Typography>
+                    {risk.mitigation && (
+                      <Typography variant="body2" color="text.secondary" component="div">
+                        <strong>缓解：</strong>{highlightCitations(risk.mitigation)}
                       </Typography>
-                    </Box>
-                  }
-                  secondary={
-                    <Box component="div">
-                      <Typography variant="caption" display="block" component="div">
-                        影响：{highlightCitations(risk.impact)}
-                      </Typography>
-                      {risk.mitigation && (
-                        <Typography variant="caption" display="block" component="div">
-                          缓解：{highlightCitations(risk.mitigation)}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
-                />
+                    )}
+                  </Box>
+                </Box>
               </ListItem>
             ))}
           </List>
@@ -300,7 +328,7 @@ export default function DiscussionReport({
       </Accordion>
 
       {/* 操作栏 */}
-      <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
+      <Box sx={{ display: 'flex', gap: 2, mt: 4 }} className="no-print">
         <Button
           variant="outlined"
           startIcon={<DownloadIcon />}

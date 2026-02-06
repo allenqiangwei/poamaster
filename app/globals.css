@@ -24,3 +24,117 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 打印样式优化 - 用于PDF导出 */
+@media print {
+  /* 隐藏所有按钮和交互元素 */
+  button,
+  .no-print,
+  .MuiIconButton-root,
+  .MuiButton-root,
+  .MuiFab-root,
+  [role="button"],
+  a[role="button"] {
+    display: none !important;
+  }
+
+  /* 隐藏展开/折叠图标 */
+  .MuiAccordionSummary-expandIconWrapper,
+  .MuiSvgIcon-root.MuiAccordion-expandIcon {
+    display: none !important;
+  }
+
+  /* 强制展开所有 Accordion */
+  .MuiAccordion-root {
+    box-shadow: none !important;
+    border: 1px solid #e0e0e0 !important;
+    margin-bottom: 8px !important;
+  }
+
+  .MuiAccordion-root:before {
+    display: none !important;
+  }
+
+  .MuiAccordionSummary-root {
+    cursor: default !important;
+    min-height: auto !important;
+    padding: 12px 16px !important;
+  }
+
+  .MuiAccordionDetails-root {
+    display: block !important;
+    padding: 16px !important;
+  }
+
+  /* 确保内容可见 */
+  .MuiCollapse-root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .MuiCollapse-wrapper,
+  .MuiCollapse-wrapperInner {
+    height: auto !important;
+  }
+
+  /* 重置背景色为白色 */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* 移除装饰性样式 */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* 优化 Paper 组件 */
+  .MuiPaper-root {
+    box-shadow: none !important;
+    border: 1px solid #e0e0e0 !important;
+  }
+
+  /* 展开所有折叠的内容 */
+  details,
+  summary {
+    display: block !important;
+  }
+
+  /* 避免分页断开 */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+
+  /* 优化表格和列表 */
+  table, ul, ol {
+    page-break-inside: avoid;
+  }
+
+  /* 优化链接显示 - 不显示URL */
+  a[href]:after {
+    content: none !important;
+  }
+
+  /* 保持颜色标记 */
+  .MuiChip-root,
+  .MuiChip-colorSuccess,
+  .MuiChip-colorError,
+  .MuiChip-colorWarning,
+  .MuiChip-colorPrimary,
+  .MuiChip-colorInfo {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 优化分页 */
+  .MuiAccordion-root,
+  .MuiPaper-root {
+    page-break-inside: avoid;
+  }
+
+  /* 隐藏 Stepper 中的连接线（如果有的话）*/
+  .MuiStepConnector-root {
+    display: none !important;
+  }
+}

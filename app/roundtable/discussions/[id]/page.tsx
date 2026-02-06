@@ -63,11 +63,26 @@ export default function DiscussionDetailPage() {
   };
 
   const handleExportPDF = async () => {
-    alert('PDF导出功能将在后续版本实现');
+    // 使用浏览器打印功能导出PDF
+    window.print();
   };
 
   const handleSendToFeishu = async () => {
-    alert('发送到飞书功能将在后续版本实现');
+    try {
+      const res = await fetch(`/api/roundtable/discussions/${discussionId}/send-feishu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to send to Feishu');
+      }
+
+      alert('✅ 已成功发送到飞书');
+    } catch (err) {
+      alert('❌ 发送失败: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
   };
 
   const handleCreateTask = async (actionId: string) => {
@@ -113,7 +128,21 @@ export default function DiscussionDetailPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      {/* 打印专用标题 */}
+      <Box sx={{ display: 'none', '@media print': { display: 'block' }, mb: 4 }}>
+        <Typography variant="h4" gutterBottom>
+          {discussion.title}
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          圆桌会议讨论报告
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          生成时间：{new Date().toLocaleString('zh-CN')}
+        </Typography>
+      </Box>
+
+      {/* 屏幕显示的标题栏 */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }} className="no-print">
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             startIcon={<BackIcon />}
@@ -232,11 +261,11 @@ export default function DiscussionDetailPage() {
 
       {discussion.status === 'processing' && (
         <>
-          <Alert severity="info" sx={{ mb: 3 }}>
+          <Alert severity="info" sx={{ mb: 3 }} className="no-print">
             讨论正在进行中，预计需要3-5分钟。您可以离开页面，完成后会收到飞书通知。
           </Alert>
 
-          <Paper sx={{ p: 3, mb: 3 }}>
+          <Paper sx={{ p: 3, mb: 3 }} className="no-print">
             <Typography variant="h6" gutterBottom>
               讨论进展
             </Typography>
@@ -317,7 +346,7 @@ export default function DiscussionDetailPage() {
       )}
 
       {discussion.status === 'failed' && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} className="no-print">
           讨论处理失败：{discussion.errorMessage}
         </Alert>
       )}
