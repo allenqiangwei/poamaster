@@ -475,6 +475,36 @@ fi
 print_success "端口 $PORT 可用"
 echo ""
 
+# 飞书监听服务（可选）
+echo "飞书消息监听服务..."
+echo "----------------------------"
+# 检查 feishu-listener 目录是否存在
+if [ -d "services/feishu-listener" ]; then
+    # 安装 listener 依赖
+    print_info "安装飞书监听服务依赖..."
+    (cd services/feishu-listener && npm install --silent 2>/dev/null)
+    print_success "飞书监听服务依赖安装完成"
+
+    if [ "$START_MODE" = "3" ]; then
+        # PM2 模式：自动启动 listener
+        echo ""
+        read -p "是否启动飞书消息监听服务？[y/N]: " START_FEISHU
+        if [ "$START_FEISHU" = "y" ] || [ "$START_FEISHU" = "Y" ]; then
+            pm2 start npx --name feishu-listener -- tsx src/index.ts --cwd services/feishu-listener
+            print_success "飞书监听服务已启动（PM2: feishu-listener）"
+            echo "  pm2 logs feishu-listener  # 查看日志"
+        else
+            print_info "跳过飞书监听服务"
+        fi
+    else
+        print_info "飞书监听服务需要单独启动："
+        echo "  cd services/feishu-listener && npx tsx src/index.ts"
+    fi
+else
+    print_info "飞书监听服务目录不存在，跳过"
+fi
+echo ""
+
 print_success "部署完成！"
 echo ""
 echo "================================"

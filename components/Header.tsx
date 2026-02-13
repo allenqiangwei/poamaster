@@ -15,7 +15,8 @@ import {
   List as ListIcon,
   People as PeopleIcon,
   Assessment as PulseIcon,
-  Forum as RoundtableIcon
+  Forum as RoundtableIcon,
+  Chat as FeishuIcon
 } from '@mui/icons-material';
 
 export default function Header() {
@@ -101,6 +102,16 @@ export default function Header() {
             }}
           >
             圆桌会议
+          </Button>
+          <Button
+            color="inherit"
+            startIcon={<FeishuIcon />}
+            onClick={() => router.push('/feishu')}
+            sx={{
+              bgcolor: pathname?.startsWith('/feishu') ? 'rgba(255, 255, 255, 0.1)' : 'transparent'
+            }}
+          >
+            飞书集成
           </Button>
         </Box>
 

@@ -222,3 +222,68 @@ ${text}`;
     throw new Error('任务提取失败: 未知错误');
   }
 }
+
+/**
+ * 从图片中直接提取任务（单次 Vision 调用，合并 OCR + 任务提取）
+ */
+export async function extractTasksFromImage(
+  buffer: Buffer,
+  mimeType: string,
+  model?: string
+): Promise<{ tasks: ExtractedTask[]; extractedText: string }> {
+  const client = await getOpenAIClient();
+  // Vision 必须用支持图片的模型
+  const visionModel = 'gpt-4o';
+  const currentDate = new Date().toISOString().split('T')[0];
+
+  const base64Image = buffer.toString('base64');
+  const dataUrl = `data:${mimeType};base64,${base64Image}`;
+
+  const response = await client.chat.completions.create({
+    model: visionModel,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `当前日期：${currentDate}
+
+请仔细查看这张图片，提取图片中的所有文字内容，然后从中识别并提取所有任务。
+
+要求：
+1. 先完整识别图片中的所有文字
+2. 然后按照你的任务提取规则，从识别到的文字中提取任务
+3. 返回标准 JSON 格式`
+          },
+          {
+            type: 'image_url',
+            image_url: { url: dataUrl, detail: 'high' }
+          }
+        ]
+      }
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.3,
+    max_completion_tokens: 4096,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI 返回了空响应');
+  }
+
+  const parsed = JSON.parse(content);
+  const tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
+
+  return {
+    tasks: tasks.map((task: any) => ({
+      title: task.title || '',
+      assignee: task.assignee || null,
+      dueDate: task.dueDate || null,
+      dod: task.dod || null,
+    })),
+    extractedText: parsed.extractedText || content.substring(0, 1000),
+  };
+}

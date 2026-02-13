@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { extractFromReport } from '@/lib/pulse/extractor';
+import { FileParser } from '@/lib/insights/parser';
+import path from 'path';
+
+export const maxDuration = 300;
 
 // POST /api/pulse/analysis/extract
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { reportId, model } = body;
+    const { reportId, model, selectedPages } = body as {
+      reportId?: string;
+      model?: string;
+      selectedPages?: number[];
+    };
 
     if (!reportId) {
       return NextResponse.json(
@@ -27,7 +35,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!report.parsedText) {
+    let parsedText = report.parsedText;
+
+    // If parsedText is empty and selectedPages provided, parse now (PDF preview flow)
+    if (!parsedText && selectedPages && selectedPages.length > 0) {
+      const fullPath = path.join(process.cwd(), report.filePath);
+      const parser = new FileParser();
+
+      console.log('[Extract] Parsing PDF with selectedPages:', selectedPages);
+      const parseResult = await parser.parseFromPath(fullPath, selectedPages);
+      parsedText = parseResult.text;
+
+      // Update report with parsed text
+      await prisma.pulseReport.update({
+        where: { id: reportId },
+        data: {
+          parsedText,
+          parseStatus: parsedText ? 'SUCCESS' : 'FAILED',
+          parseError: parsedText ? null : 'Failed to extract text from selected pages',
+        }
+      });
+    }
+
+    if (!parsedText) {
       return NextResponse.json(
         { success: false, error: 'Report has no parsed text' },
         { status: 400 }
@@ -35,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await extractFromReport(
-      report.parsedText,
+      parsedText,
       report.project.name,
       report.reportType,
       report.reportDate.toISOString().split('T')[0],

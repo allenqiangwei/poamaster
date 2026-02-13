@@ -38,7 +38,8 @@ export default function SettingsPage() {
     'feishu.appId': '',
     'feishu.appSecret': '',
     'feishu.chatId': '',
-    'feishu.enabled': 'true'
+    'feishu.enabled': 'true',
+    'feishu.cookie': ''
   });
   const [availableModels, setAvailableModels] = useState<OpenAIModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -266,6 +267,32 @@ export default function SettingsPage() {
             helperText="接收每日任务通知的群聊 ID"
           />
         </Box>
+      </Paper>
+
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          飞书消息监听
+        </Typography>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="caption">
+            配置飞书 Cookie 后可启用实时消息监听，采集群聊和私聊消息。
+            获取方式：登录飞书网页版 → F12 → Network 标签 → 刷新页面 → 点击任意请求 → 复制 Request Headers 中的 Cookie 值。
+            （注意：不能用 document.cookie，因为关键字段 passport_web_did 是 httpOnly 的）
+          </Typography>
+        </Alert>
+        <TextField
+          label="飞书 Cookie"
+          fullWidth
+          multiline
+          minRows={3}
+          maxRows={6}
+          type="password"
+          value={configs['feishu.cookie']}
+          onChange={(e) =>
+            setConfigs({ ...configs, 'feishu.cookie': e.target.value })
+          }
+          helperText="从飞书网页版获取的 Cookie（加密存储）"
+        />
       </Paper>
 
       <Box sx={{ mt: 3 }}>

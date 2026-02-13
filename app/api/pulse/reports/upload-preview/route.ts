@@ -3,16 +3,16 @@ import { prisma } from '@/lib/prisma';
 import { FileStorage } from '@/lib/insights/storage';
 import { FileParser } from '@/lib/insights/parser';
 import { ReportType } from '@prisma/client';
-import { PULSE_UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_MIME_TYPES } from '@/lib/pulse/constants';
+import { PULSE_UPLOAD_DIR, MAX_FILE_SIZE } from '@/lib/pulse/constants';
 import path from 'path';
 import fs from 'fs/promises';
 
-// Configure route to handle large files (up to 50MB)
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 5 minutes timeout
+export const maxDuration = 60;
 
-// POST /api/pulse/reports/upload
+// POST /api/pulse/reports/upload-preview
+// Uploads a PDF, saves it, returns totalPages + thumbnail URLs (no text parsing yet)
 export async function POST(request: NextRequest) {
   let filePath: string | null = null;
 
@@ -20,9 +20,7 @@ export async function POST(request: NextRequest) {
     let formData;
     try {
       formData = await request.formData();
-    } catch (formDataError) {
-      // 捕获 FormData 解析错误（通常是文件太大）
-      console.error('FormData parsing error:', formDataError);
+    } catch {
       return NextResponse.json(
         { success: false, error: '文件解析失败，可能是文件过大。请尝试上传小于 50MB 的文件' },
         { status: 400 }
@@ -41,9 +39,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    if (file.type !== 'application/pdf') {
       return NextResponse.json(
-        { success: false, error: '只支持 PDF、文本和图片文件（JPG/PNG/WebP）' },
+        { success: false, error: '预览功能仅支持 PDF 文件' },
         { status: 400 }
       );
     }
@@ -66,37 +64,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Save file to disk
     const storage = new FileStorage(PULSE_UPLOAD_DIR);
     const buffer = Buffer.from(await file.arrayBuffer());
     filePath = await storage.saveFile(buffer, file.name, projectId);
 
+    // Get page count
     const parser = new FileParser();
     const fullPath = path.join(process.cwd(), filePath);
+    const totalPages = await parser.getPdfPageCount(fullPath);
 
-    console.log('[Upload] Parsing file:', { fileName: file.name, fileType: file.type, fullPath });
-
-    let parseResult;
-    try {
-      parseResult = await parser.parseFromPath(fullPath);
-      console.log('[Upload] Parse result:', {
-        textLength: parseResult.text?.length || 0,
-        charCount: parseResult.charCount,
-        hasText: !!parseResult.text
-      });
-    } catch (parseError) {
-      console.error('[Upload] Parse error:', parseError);
-      // 继续创建报告但标记为失败
-      parseResult = {
-        text: '',
-        charCount: 0,
-        metadata: { fileType: 'unknown', fileName: file.name }
-      };
-    }
-
-    if (!parseResult.text || parseResult.text.trim().length === 0) {
-      console.error('[Upload] Parse failed - no text extracted from file:', file.name);
-    }
-
+    // Create report record with PENDING status (no parsed text yet)
     const report = await prisma.pulseReport.create({
       data: {
         projectId,
@@ -104,24 +82,27 @@ export async function POST(request: NextRequest) {
         filePath,
         reportType,
         reportDate: new Date(reportDate),
-        parsedText: parseResult.text,
-        parseStatus: parseResult.text ? 'SUCCESS' : 'FAILED',
-        parseError: parseResult.text ? null : 'Failed to extract text from file'
+        parsedText: null,
+        parseStatus: 'PENDING',
       }
     });
+
+    // Build thumbnail URLs
+    const thumbnails = Array.from({ length: totalPages }, (_, i) => ({
+      page: i + 1,
+      url: `/api/pulse/reports/${report.id}/thumbnail/${i + 1}`,
+    }));
 
     return NextResponse.json({
       success: true,
       data: {
-        id: report.id,
-        fileName: report.fileName,
-        parseStatus: report.parseStatus,
-        parsedText: report.parsedText,
-        charCount: parseResult.charCount
+        reportId: report.id,
+        totalPages,
+        thumbnails,
       }
     }, { status: 201 });
   } catch (error) {
-    console.error('Failed to upload report:', error);
+    console.error('Failed to upload preview:', error);
 
     if (filePath) {
       try {
@@ -132,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, error: 'Failed to upload report' },
+      { success: false, error: 'Failed to process PDF' },
       { status: 500 }
     );
   }

@@ -1,0 +1,23 @@
+{
+  "name": "feishu-listener",
+  "version": "1.0.0",
+  "description": "Feishu WebSocket message listener for POA Master",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "prisma:generate": "prisma generate --schema ../../prisma/schema.prisma"
+  },
+  "prisma": {
+    "schema": "../../prisma/schema.prisma"
+  },
+  "dependencies": {
+    "protobufjs": "^7.4.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
