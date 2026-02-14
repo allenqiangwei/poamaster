@@ -1,8 +1,8 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { runKeywordGeneration } from './keyword-engine';
 
-let keywordGenJob: cron.ScheduledTask | null = null;
-let briefingGenJob: cron.ScheduledTask | null = null;
+let keywordGenJob: ScheduledTask | null = null;
+let briefingGenJob: ScheduledTask | null = null;
 
 /**
  * Start the nightly insight pipeline scheduler.
