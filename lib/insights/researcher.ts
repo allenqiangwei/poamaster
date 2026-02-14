@@ -454,7 +454,7 @@ export async function researchWithCombo(
     if (combo.status === 'new') {
       comboUpdate.status = 'active';
     }
-    await prisma.insightTopicCombo.update({
+    await prisma.keywordCombo.update({
       where: { id: combo.id },
       data: comboUpdate,
     });
