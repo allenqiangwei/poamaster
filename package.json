@@ -26,6 +26,7 @@
     "pdfjs-dist": "^5.4.624",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "sentiment": "^5.0.2",
     "undici": "^7.19.2",
     "unpdf": "^1.4.0"
   },
@@ -36,6 +37,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sentiment": "^5.0.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "prisma": "^6.19.2",

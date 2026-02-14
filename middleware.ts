@@ -11,7 +11,7 @@ import { verifySession } from '@/lib/auth';
 export const runtime = 'nodejs';
 
 // 公开路径（无需认证）
-const PUBLIC_PATHS = ['/login', '/init', '/api/auth', '/api/sentiment/analyze'];
+const PUBLIC_PATHS = ['/login', '/init', '/api/auth'];
 
 // 静态资源路径（通过 matcher 配置排除）
 export const config = {

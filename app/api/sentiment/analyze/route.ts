@@ -1,42 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
-import { getOpenAIClient } from '@/lib/openai';
+import Sentiment from 'sentiment';
 
-const BATCH_SIZE = 20;
+const analyzer = new Sentiment();
 
-// POST /api/sentiment/analyze — Batch sentiment analysis (manual trigger from UI)
+// Game review keyword boosters for more accurate analysis
+const GAME_KEYWORDS: Record<string, number> = {
+  // Negative
+  'bug': -3, 'bugs': -3, 'crash': -4, 'crashes': -4, 'lag': -3, 'laggy': -3,
+  'p2w': -4, 'pay2win': -4, 'pay-to-win': -4, 'paywall': -3,
+  'scam': -4, 'ripoff': -4, 'rip-off': -4, 'greedy': -3,
+  'unplayable': -4, 'broken': -3, 'glitch': -3, 'glitchy': -3,
+  'uninstall': -3, 'uninstalled': -3, 'deleted': -2, 'waste': -3,
+  'boring': -2, 'repetitive': -2, 'grindy': -2, 'grind': -1,
+  'ads': -2, 'advertisement': -2, 'spammy': -3,
+  'nerf': -2, 'nerfed': -2, 'unfair': -3, 'unbalanced': -2,
+  'expensive': -2, 'overpriced': -3, 'money grab': -4,
+  // Positive
+  'addictive': 3, 'addicting': 3, 'polished': 3, 'smooth': 2,
+  'f2p': 2, 'free-to-play': 2, 'fair': 2, 'balanced': 2,
+  'masterpiece': 4, 'gem': 3, 'brilliant': 3, 'innovative': 3,
+  'recommend': 3, 'recommended': 3, 'must-play': 4,
+  'gorgeous': 3, 'stunning': 3, 'beautiful': 2,
+  'strategic': 2, 'strategy': 1, 'tactical': 1,
+  'immersive': 3, 'engaging': 2, 'challenging': 1,
+};
+
+// Issue detection keywords
+const ISSUE_PATTERNS: Array<{ keywords: string[]; tag: string }> = [
+  { keywords: ['bug', 'bugs', 'glitch', 'glitchy', 'crash', 'crashes', 'broken', 'fix'], tag: 'bugs' },
+  { keywords: ['lag', 'laggy', 'slow', 'fps', 'frame', 'performance', 'loading'], tag: 'performance' },
+  { keywords: ['pay', 'p2w', 'pay2win', 'paywall', 'money', 'price', 'expensive', 'purchase', 'iap', 'microtransaction'], tag: 'monetization' },
+  { keywords: ['ad', 'ads', 'advertisement', 'popup', 'pop-up', 'commercial'], tag: 'ads' },
+  { keywords: ['graphic', 'graphics', 'visual', 'art', 'animation', 'design', 'gorgeous', 'beautiful', 'ugly'], tag: 'graphics' },
+  { keywords: ['gameplay', 'mechanic', 'control', 'combat', 'battle', 'strategy', 'tactical', 'fun', 'boring'], tag: 'gameplay' },
+  { keywords: ['update', 'patch', 'version', 'nerf', 'nerfed', 'change', 'changelog'], tag: 'updates' },
+  { keywords: ['support', 'customer', 'service', 'help', 'response', 'ticket', 'contact'], tag: 'customer support' },
+  { keywords: ['server', 'connection', 'disconnect', 'maintenance', 'downtime', 'online'], tag: 'server' },
+  { keywords: ['story', 'plot', 'narrative', 'campaign', 'quest', 'mission', 'lore'], tag: 'story' },
+  { keywords: ['balance', 'unbalanced', 'unfair', 'overpowered', 'op', 'nerf', 'buff', 'matchmaking'], tag: 'balance' },
+  { keywords: ['grind', 'grindy', 'repetitive', 'boring', 'tedious', 'slow progress'], tag: 'grind' },
+];
+
+// POST /api/sentiment/analyze — Local sentiment analysis (no LLM needed)
 export async function POST(request: NextRequest) {
-  // Support both cookie auth (UI) and Bearer token (service)
-  const authHeader = request.headers.get('Authorization');
-  const expectedSecret = process.env.SENTIMENT_API_SECRET;
-
-  if (authHeader && expectedSecret && authHeader === `Bearer ${expectedSecret}`) {
-    // service-to-service auth OK
-  } else {
-    // cookie auth
-    const token = request.cookies.get('session')?.value;
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const session = await verifySession(token);
-    if (!session) {
-      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
-    }
+  const token = request.cookies.get('session')?.value;
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const session = await verifySession(token);
+  if (!session) {
+    return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
   }
 
   try {
     const body = await request.json();
     const { gameId } = body;
 
-    // Find unanalyzed reviews
     const where: any = { sentimentLabel: null };
     if (gameId) where.gameId = gameId;
 
     const unanalyzed = await prisma.sentimentReview.findMany({
       where,
       select: { id: true, title: true, content: true, rating: true },
-      take: 200,
     });
 
     if (unanalyzed.length === 0) {
@@ -45,31 +72,18 @@ export async function POST(request: NextRequest) {
 
     let analyzed = 0;
 
-    // Process in batches of BATCH_SIZE
-    for (let i = 0; i < unanalyzed.length; i += BATCH_SIZE) {
-      const batch = unanalyzed.slice(i, i + BATCH_SIZE);
-      const batchTexts = batch.map((r, idx) => {
-        const rating = `(${r.rating}★)`;
-        const title = r.title ? `${r.title} — ` : '';
-        return `[${idx + 1}] ${rating} ${title}${r.content}`.substring(0, 300);
+    for (const review of unanalyzed) {
+      const result = analyzeLocally(review.title, review.content, review.rating);
+
+      await prisma.sentimentReview.update({
+        where: { id: review.id },
+        data: {
+          sentimentScore: result.sentimentScore,
+          sentimentLabel: result.sentimentLabel,
+          keyIssues: result.keyIssues,
+        },
       });
-
-      const results = await analyzeBatch(batchTexts);
-
-      for (let j = 0; j < batch.length; j++) {
-        const analysis = results[j];
-        if (!analysis) continue;
-
-        await prisma.sentimentReview.update({
-          where: { id: batch[j].id },
-          data: {
-            sentimentScore: analysis.sentimentScore,
-            sentimentLabel: analysis.sentimentLabel,
-            keyIssues: analysis.keyIssues,
-          },
-        });
-        analyzed++;
-      }
+      analyzed++;
     }
 
     return NextResponse.json({ success: true, analyzed });
@@ -79,52 +93,39 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const BATCH_SYSTEM_PROMPT = `You are a game review sentiment analyzer. You will receive multiple reviews numbered [1], [2], etc. Analyze each and return a JSON object:
-{
-  "results": [
-    { "index": 1, "sentimentScore": 0.8, "sentimentLabel": "POSITIVE", "keyIssues": ["gameplay"] },
-    ...
-  ]
-}
+function analyzeLocally(
+  title: string | null,
+  content: string,
+  rating: number
+): { sentimentScore: number; sentimentLabel: string; keyIssues: string[] } {
+  const text = `${title || ''} ${content}`.toLowerCase();
 
-Rules:
-- sentimentScore: float from -1.0 (very negative) to 1.0 (very positive)
-- sentimentLabel: "POSITIVE" (score >= 0.2), "NEGATIVE" (score <= -0.2), "NEUTRAL" (otherwise)
-- keyIssues: up to 5 lowercase English tags (e.g. "bugs", "monetization", "gameplay", "graphics", "performance", "customer support", "ads", "updates", "pay-to-win")
-- Return valid JSON only, one result per review in order`;
+  // 1. Text-based sentiment score (AFINN + game keywords)
+  const textResult = analyzer.analyze(text, { extras: GAME_KEYWORDS });
+  // Normalize comparative score to -1..1 range (comparative is typically -5..5)
+  const textScore = Math.max(-1, Math.min(1, textResult.comparative * 2));
 
-async function analyzeBatch(texts: string[]): Promise<Array<{
-  sentimentScore: number;
-  sentimentLabel: string;
-  keyIssues: string[];
-} | null>> {
-  const client = await getOpenAIClient();
+  // 2. Rating-based score: map 1-5 stars to -1..1
+  const ratingScore = (rating - 3) / 2; // 1→-1, 2→-0.5, 3→0, 4→0.5, 5→1
 
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: BATCH_SYSTEM_PROMPT },
-      { role: 'user', content: texts.join('\n\n') },
-    ],
-    response_format: { type: 'json_object' },
-    temperature: 0.1,
-  });
+  // 3. Combined: rating is the stronger signal (70%), text refines it (30%)
+  const combined = ratingScore * 0.7 + textScore * 0.3;
+  const sentimentScore = Math.round(combined * 100) / 100;
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) return texts.map(() => null);
+  // 4. Label
+  let sentimentLabel: string;
+  if (sentimentScore >= 0.15) sentimentLabel = 'POSITIVE';
+  else if (sentimentScore <= -0.15) sentimentLabel = 'NEGATIVE';
+  else sentimentLabel = 'NEUTRAL';
 
-  const parsed = JSON.parse(content);
-  const rawResults: any[] = parsed.results || [];
+  // 5. Key issues detection
+  const keyIssues: string[] = [];
+  for (const pattern of ISSUE_PATTERNS) {
+    if (keyIssues.length >= 5) break;
+    if (pattern.keywords.some(kw => text.includes(kw))) {
+      keyIssues.push(pattern.tag);
+    }
+  }
 
-  return texts.map((_, idx) => {
-    const r = rawResults.find((x: any) => x.index === idx + 1) || rawResults[idx];
-    if (!r) return null;
-    return {
-      sentimentScore: typeof r.sentimentScore === 'number' ? r.sentimentScore : 0,
-      sentimentLabel: ['POSITIVE', 'NEUTRAL', 'NEGATIVE'].includes(r.sentimentLabel)
-        ? r.sentimentLabel : 'NEUTRAL',
-      keyIssues: Array.isArray(r.keyIssues)
-        ? r.keyIssues.filter((i: unknown) => typeof i === 'string').slice(0, 5) : [],
-    };
-  });
+  return { sentimentScore, sentimentLabel, keyIssues };
 }
