@@ -32,7 +32,7 @@ async function collectGameReviews(gameId: string, gameName: string, googlePlayId
       country: 'us',
     });
 
-    const reviewList = reviews.data || [];
+    const reviewList = (reviews as any).data || reviews || [];
 
     for (const review of reviewList) {
       const externalId = review.id;
