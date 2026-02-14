@@ -588,13 +588,14 @@ model InsightBriefing {
 
 model SuggestedTopic {
   id         String   @id @default(cuid())
-  briefingId String
+  briefingId String?
   name       String                          // 推荐话题名称
   reason     String   @db.Text               // 推荐理由
   status     String   @default("pending")    // pending | accepted | dismissed
+  source     String   @default("briefing")   // briefing | daily
   createdAt  DateTime @default(now())
 
-  briefing InsightBriefing @relation(fields: [briefingId], references: [id])
+  briefing InsightBriefing? @relation(fields: [briefingId], references: [id])
 
   @@index([briefingId])
 }
@@ -624,4 +625,109 @@ model InsightCard {
   @@index([briefingId])
   @@index([topicId])
   @@index([comboId])
+}
+
+// ============================================
+// Sentiment Monitoring — 舆情监控模块
+// ============================================
+
+model MonitoredGame {
+  id            String   @id @default(cuid())
+  name          String
+  appStoreId    String?
+  googlePlayId  String?
+  xKeywords     String[] @default([])
+  fbKeywords    String[] @default([])
+  iconUrl       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reviews       SentimentReview[]
+  mentions      SentimentMention[]
+  alerts        SentimentAlert[]
+  dailyStats    SentimentDailyStat[]
+}
+
+model SentimentReview {
+  id              String   @id @default(cuid())
+  gameId          String
+  platform        String
+  externalId      String
+  author          String?
+  rating          Int
+  title           String?
+  content         String   @db.Text
+  language        String?
+  sentimentScore  Float?
+  sentimentLabel  String?
+  keyIssues       String[] @default([])
+  publishedAt     DateTime
+  collectedAt     DateTime @default(now())
+
+  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, externalId])
+  @@index([gameId, publishedAt])
+  @@index([sentimentLabel])
+}
+
+model SentimentMention {
+  id              String   @id @default(cuid())
+  gameId          String
+  platform        String
+  externalId      String
+  author          String?
+  authorFollowers Int?
+  content         String   @db.Text
+  url             String?
+  sentimentScore  Float?
+  sentimentLabel  String?
+  keyIssues       String[] @default([])
+  engagement      Json?
+  publishedAt     DateTime
+  collectedAt     DateTime @default(now())
+
+  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, externalId])
+  @@index([gameId, publishedAt])
+  @@index([sentimentLabel])
+}
+
+model SentimentAlert {
+  id          String    @id @default(cuid())
+  gameId      String
+  type        String
+  severity    String
+  title       String
+  summary     String    @db.Text
+  dataPoints  Json?
+  isRead      Boolean   @default(false)
+  notifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, createdAt])
+  @@index([isRead])
+}
+
+model SentimentDailyStat {
+  id              String   @id @default(cuid())
+  gameId          String
+  date            DateTime @db.Date
+  reviewCount     Int      @default(0)
+  mentionCount    Int      @default(0)
+  avgSentiment    Float?
+  avgRating       Float?
+  negativeCount   Int      @default(0)
+  positiveCount   Int      @default(0)
+  topIssues       Json?
+  summary         String?  @db.Text
+  generatedAt     DateTime @default(now())
+
+  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, date])
 }
