@@ -1,7 +1,6 @@
 import gplay from 'google-play-scraper';
 import { prisma } from '../index.js';
 import { logger } from '../logger.js';
-import { analyzeNewReviews } from '../analyzer.js';
 
 export async function collectAllGooglePlayReviews() {
   const games = await prisma.monitoredGame.findMany({
@@ -62,5 +61,4 @@ async function collectGameReviews(gameId: string, gameName: string, googlePlayId
   }
 
   logger.info(`[GooglePlay] ${gameName}: ${newCount} new reviews`);
-  if (newCount > 0) await analyzeNewReviews(gameId);
 }

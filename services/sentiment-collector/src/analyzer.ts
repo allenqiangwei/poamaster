@@ -32,11 +32,18 @@ export async function analyzeNewReviews(gameId: string) {
 
       if (!res.ok) {
         const text = await res.text();
-        logger.error(`[Analyzer] API error (${res.status}):`, text);
+        logger.error(`[Analyzer] API error (${res.status}):`, text.slice(0, 200));
         continue;
       }
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        logger.error(`[Analyzer] Invalid JSON response:`, text.slice(0, 200));
+        continue;
+      }
       logger.info(`[Analyzer] Batch analyzed: ${data.analyzed} items`);
     } catch (error: any) {
       logger.error(`[Analyzer] Request failed:`, error.message);

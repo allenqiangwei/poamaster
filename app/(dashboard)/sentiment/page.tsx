@@ -21,6 +21,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import StarIcon from '@mui/icons-material/Star';
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useRouter } from 'next/navigation';
 import { designTokens as dt } from '@/lib/theme';
 
@@ -79,6 +80,8 @@ export default function SentimentOverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [gameStats, setGameStats] = useState<GameStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeResult, setAnalyzeResult] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -98,6 +101,35 @@ export default function SentimentOverviewPage() {
     fetchOverview();
   }, []);
 
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalyzeResult(null);
+    try {
+      const res = await fetch('/api/sentiment/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAnalyzeResult(`已分析 ${data.analyzed} 条评论`);
+        // Refresh overview
+        const overRes = await fetch('/api/sentiment/overview');
+        const overData = await overRes.json();
+        if (overData.success) {
+          setStats(overData.stats);
+          setGameStats(overData.gameStats);
+        }
+      } else {
+        setAnalyzeResult(`分析失败: ${data.error}`);
+      }
+    } catch (e: any) {
+      setAnalyzeResult(`分析出错: ${e.message}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -113,14 +145,42 @@ export default function SentimentOverviewPage() {
         <Typography variant="h4" sx={{ color: dt.text.primary, fontWeight: 700 }}>
           舆情监控
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<SettingsIcon />}
-          onClick={() => router.push('/sentiment/games')}
-        >
-          管理游戏
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="contained"
+            startIcon={analyzing ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+            onClick={handleAnalyze}
+            disabled={analyzing}
+          >
+            {analyzing ? '分析中...' : 'AI 分析评论'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<SettingsIcon />}
+            onClick={() => router.push('/sentiment/games')}
+          >
+            管理游戏
+          </Button>
+        </Stack>
       </Box>
+
+      {/* Analyze result */}
+      {analyzeResult && (
+        <Typography
+          variant="body2"
+          sx={{
+            mb: 2,
+            p: 1.5,
+            borderRadius: 1,
+            bgcolor: analyzeResult.includes('失败') || analyzeResult.includes('出错')
+              ? dt.danger.subtle : dt.success.subtle,
+            color: analyzeResult.includes('失败') || analyzeResult.includes('出错')
+              ? dt.danger.dark : dt.success.dark,
+          }}
+        >
+          {analyzeResult}
+        </Typography>
+      )}
 
       {/* Stat Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>

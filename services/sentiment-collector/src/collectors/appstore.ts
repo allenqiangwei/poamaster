@@ -1,7 +1,6 @@
 import store from 'app-store-scraper';
 import { prisma } from '../index.js';
 import { logger } from '../logger.js';
-import { analyzeNewReviews } from '../analyzer.js';
 
 export async function collectAllReviews() {
   const games = await prisma.monitoredGame.findMany({
@@ -68,5 +67,4 @@ async function collectGameReviews(gameId: string, gameName: string, appStoreId: 
   }
 
   logger.info(`[AppStore] ${gameName}: ${newCount} new reviews`);
-  if (newCount > 0) await analyzeNewReviews(gameId);
 }
