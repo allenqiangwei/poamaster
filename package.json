@@ -26,6 +26,7 @@
     "pdfjs-dist": "^5.4.624",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "recharts": "^3.7.0",
     "sentiment": "^5.0.2",
     "undici": "^7.19.2",
     "unpdf": "^1.4.0"
