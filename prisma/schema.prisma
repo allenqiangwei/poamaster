@@ -538,3 +538,76 @@ model FeishuMessage {
   @@index([timestamp])
   @@index([senderId])
 }
+
+// ==================== Insight Briefing System ====================
+
+model InsightTopic {
+  id        String   @id @default(cuid())
+  name      String                       // 话题名称
+  keywords  String[] @default([])        // 搜索关键词
+  source    String   @default("auto")    // auto | manual
+  weight    Int      @default(50)        // 权重 0-100
+  isPaused  Boolean  @default(false)
+  lastHitAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cards     InsightCard[]
+  combos    KeywordCombo[]
+}
+
+model KeywordCombo {
+  id         String    @id @default(cuid())
+  topicId    String
+  keywords   String[]
+  score      Int       @default(50)
+  status     String    @default("active") // active | retired | new
+  usedCount  Int       @default(0)
+  lastUsedAt DateTime?
+  feedback   Int?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  topic InsightTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  cards InsightCard[]
+
+  @@index([topicId])
+  @@index([status, score])
+}
+
+model InsightBriefing {
+  id         String   @id @default(cuid())
+  date       DateTime @unique            // 简报日期（一天一份）
+  summary    String   @db.Text           // 今日要闻概要
+  status     String   @default("generating") // generating | ready | sent
+  feishuSent Boolean  @default(false)
+  cardCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  cards      InsightCard[]
+}
+
+model InsightCard {
+  id          String   @id @default(cuid())
+  briefingId  String
+  topicId     String?
+  comboId     String?
+  category    String                     // risk | industry | competitor | internal | tech | opportunity
+  priority    String   @default("medium") // high | medium | low
+  title       String
+  summary     String   @db.Text
+  details     String   @db.Text          // 完整 Markdown
+  impact      String?  @db.Text
+  action      String?  @db.Text
+  sources     Json     @default("[]")    // [{title, url}]
+  relatedData Json     @default("{}")    // 关联的内部数据
+  feedback    Int?                       // 1=👍, -1=👎, null=未反馈
+  viewedAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  briefing InsightBriefing @relation(fields: [briefingId], references: [id])
+  topic    InsightTopic?   @relation(fields: [topicId], references: [id])
+  combo    KeywordCombo?   @relation(fields: [comboId], references: [id])
+
+  @@index([briefingId])
+  @@index([topicId])
+  @@index([comboId])
+}
