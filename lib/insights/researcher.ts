@@ -276,7 +276,7 @@ export async function analyzeTopicWithContext(
     summary: parsed.summary || '',
     details: parsed.details || '',
     impact: parsed.impact || null,
-    action: parsed.action || null,
+    action: Array.isArray(parsed.action) ? parsed.action.join('\n') : (parsed.action || null),
     sources: Array.isArray(parsed.sources)
       ? parsed.sources
           .filter((s: any) => s && s.title && s.url)

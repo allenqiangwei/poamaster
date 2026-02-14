@@ -55,8 +55,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 3. Delete any existing cards for this briefing (in case of regeneration)
+    // 3. Delete any existing cards and suggestions for this briefing (in case of regeneration)
     await prisma.insightCard.deleteMany({
+      where: { briefingId: briefing.id },
+    });
+    await prisma.suggestedTopic.deleteMany({
       where: { briefingId: briefing.id },
     });
 
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
                 summary: analysis.summary,
                 details: analysis.details,
                 impact: analysis.impact,
-                action: analysis.action,
+                action: Array.isArray(analysis.action) ? analysis.action.join('\n') : analysis.action,
                 sources: analysis.sources,
               },
             });
@@ -117,7 +120,17 @@ export async function POST(request: NextRequest) {
       summary = '今日所有话题研究均未返回有效结果。';
     }
 
-    // 7. Update briefing with final status
+    // 7. Suggest new topics based on card content
+    if (cards.length > 0) {
+      try {
+        const existingNames = topics.map(t => t.name);
+        await suggestNewTopics(briefing.id, cards, existingNames);
+      } catch (error) {
+        console.error('[Briefing] Topic suggestion failed:', error);
+      }
+    }
+
+    // 8. Update briefing with final status
     const updatedBriefing = await prisma.insightBriefing.update({
       where: { id: briefing.id },
       data: {
@@ -191,4 +204,81 @@ async function generateExecutiveSummary(cards: any[]): Promise<string> {
     // Fallback to title list
     return cards.map(c => `**[${c.category}]** ${c.title}: ${c.summary}`).join('\n\n');
   }
+}
+
+/**
+ * Suggest new topics based on today's briefing cards.
+ * Uses LLM to identify 2-4 topics worth tracking that aren't already monitored.
+ */
+async function suggestNewTopics(
+  briefingId: string,
+  cards: any[],
+  existingTopicNames: string[]
+): Promise<void> {
+  console.log('[Briefing] Generating topic suggestions...');
+
+  const client = await getOpenAIClient();
+
+  const cardDigest = cards.map((c, i) => {
+    return `${i + 1}. [${c.category}] ${c.title}\n${c.summary}\n${c.impact || ''}`;
+  }).join('\n\n');
+
+  const response = await client.chat.completions.create({
+    model: BRIEFING_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: `你是一位 COO 的战略情报顾问。根据今日简报内容，为 COO 推荐 2-4 个值得持续关注的新话题。
+
+要求：
+1. 话题应该是从简报内容中衍生出来的、值得长期跟踪的方向
+2. 不要推荐已有的话题
+3. 话题名称简洁（2-8 个字），便于搜索
+4. 推荐理由一句话说清为什么 COO 应该关注
+
+已有话题：${existingTopicNames.join('、') || '(无)'}
+
+返回 JSON 格式：
+{
+  "suggestions": [
+    { "name": "话题名称", "reason": "推荐理由" }
+  ]
+}`
+      },
+      {
+        role: 'user',
+        content: `今日简报内容：\n\n${cardDigest}\n\n请推荐新话题。`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.5,
+    max_completion_tokens: 500,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    console.log('[Briefing] LLM returned empty response for topic suggestions');
+    return;
+  }
+
+  const parsed = JSON.parse(content);
+  const suggestions: Array<{ name: string; reason: string }> = parsed.suggestions || [];
+
+  let created = 0;
+  for (const s of suggestions) {
+    if (!s.name || !s.reason) continue;
+    // Skip if name matches an existing topic (fuzzy)
+    if (existingTopicNames.some(n => n === s.name)) continue;
+
+    await prisma.suggestedTopic.create({
+      data: {
+        briefingId,
+        name: s.name,
+        reason: s.reason,
+      },
+    });
+    created++;
+  }
+
+  console.log(`[Briefing] Created ${created} topic suggestions`);
 }

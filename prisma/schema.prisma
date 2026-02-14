@@ -581,8 +581,22 @@ model InsightBriefing {
   status     String   @default("generating") // generating | ready | sent
   feishuSent Boolean  @default(false)
   cardCount  Int      @default(0)
+  createdAt       DateTime @default(now())
+  cards           InsightCard[]
+  suggestedTopics SuggestedTopic[]
+}
+
+model SuggestedTopic {
+  id         String   @id @default(cuid())
+  briefingId String
+  name       String                          // 推荐话题名称
+  reason     String   @db.Text               // 推荐理由
+  status     String   @default("pending")    // pending | accepted | dismissed
   createdAt  DateTime @default(now())
-  cards      InsightCard[]
+
+  briefing InsightBriefing @relation(fields: [briefingId], references: [id])
+
+  @@index([briefingId])
 }
 
 model InsightCard {
