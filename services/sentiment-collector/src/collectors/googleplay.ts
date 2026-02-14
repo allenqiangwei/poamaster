@@ -1,6 +1,7 @@
 import gplay from 'google-play-scraper';
 import { prisma } from '../index.js';
 import { logger } from '../logger.js';
+import { analyzeReview } from '../sentiment.js';
 
 export async function collectAllGooglePlayReviews() {
   const games = await prisma.monitoredGame.findMany({
@@ -38,15 +39,23 @@ async function collectGameReviews(gameId: string, gameName: string, googlePlayId
       if (!externalId) continue;
 
       try {
+        const rating = review.score || 3;
+        const title = review.title || null;
+        const content = review.text || '';
+        const sentiment = analyzeReview(title, content, rating);
+
         await prisma.sentimentReview.create({
           data: {
             gameId,
             platform: 'GOOGLE_PLAY',
             externalId,
             author: review.userName || null,
-            rating: review.score || 3,
-            title: review.title || null,
-            content: review.text || '',
+            rating,
+            title,
+            content,
+            sentimentScore: sentiment.sentimentScore,
+            sentimentLabel: sentiment.sentimentLabel,
+            keyIssues: sentiment.keyIssues,
             publishedAt: review.date ? new Date(review.date) : new Date(),
           },
         });

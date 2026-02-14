@@ -1,6 +1,7 @@
 import store from 'app-store-scraper';
 import { prisma } from '../index.js';
 import { logger } from '../logger.js';
+import { analyzeReview } from '../sentiment.js';
 
 export async function collectAllReviews() {
   const games = await prisma.monitoredGame.findMany({
@@ -42,15 +43,23 @@ async function collectGameReviews(gameId: string, gameName: string, appStoreId: 
       for (const review of reviews) {
         const externalId = String(review.id);
         try {
+          const rating = review.score || 3;
+          const title = review.title || null;
+          const content = review.text || '';
+          const sentiment = analyzeReview(title, content, rating);
+
           await prisma.sentimentReview.create({
             data: {
               gameId,
               platform: 'APP_STORE',
               externalId,
               author: review.userName || null,
-              rating: review.score || 3,
-              title: review.title || null,
-              content: review.text || '',
+              rating,
+              title,
+              content,
+              sentimentScore: sentiment.sentimentScore,
+              sentimentLabel: sentiment.sentimentLabel,
+              keyIssues: sentiment.keyIssues,
               publishedAt: review.updated ? new Date(review.updated) : new Date(),
             },
           });
