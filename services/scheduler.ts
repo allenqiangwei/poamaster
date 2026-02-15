@@ -134,5 +134,27 @@ export function startScheduler() {
     }
   );
 
-  console.log('[Scheduler] 定时任务已启动 - 每天 8:00 发送通知');
+  // Team Pulse — daily chat analysis at 8:30 AM
+  cron.schedule('30 8 * * *', async () => {
+    console.log('[Scheduler] Running daily team pulse analysis...');
+    try {
+      const { runDailyAnalysis } = await import('@/lib/team-pulse/chat-analyzer');
+      const result = await runDailyAnalysis();
+      console.log(`[Scheduler] Team pulse complete: ${result.chatsAnalyzed} chats, ${result.signalsCreated} signals`);
+
+      // Send daily pulse summary to Feishu
+      try {
+        const { generatePulseSummary } = await import('@/lib/team-pulse/chat-analyzer');
+        const summary = await generatePulseSummary();
+        const { sendFeishuTextMessage } = await import('@/lib/feishu');
+        await sendFeishuTextMessage(summary);
+      } catch (e: any) {
+        console.error('[Scheduler] Failed to send pulse to Feishu:', e.message);
+      }
+    } catch (error: any) {
+      console.error('[Scheduler] Team pulse analysis failed:', error.message);
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  console.log('[Scheduler] 定时任务已启动 - 每天 8:00 发送通知, 8:30 团队脉搏分析');
 }
