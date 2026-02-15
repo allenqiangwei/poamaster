@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
 
-const prisma = new PrismaClient();
-
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await verifySession(req);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const token = req.cookies.get('session')?.value;
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await verifySession(token);
+  if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
 
   const { id } = await params;
 
