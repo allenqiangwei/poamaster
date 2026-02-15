@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Paper,
   Typography,
   Button,
@@ -56,6 +55,7 @@ interface TodoItem {
 export default function AssigneesPage() {
   const router = useRouter();
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAssignee, setEditingAssignee] = useState<Assignee | null>(null);
@@ -87,6 +87,21 @@ export default function AssigneesPage() {
   useEffect(() => {
     loadAssignees();
   }, []);
+
+  // Fetch profiles in parallel after assignees load
+  useEffect(() => {
+    if (assignees.length === 0) return;
+    assignees.forEach((a) => {
+      fetch(`/api/assignees/${a.id}/profile`, { credentials: 'include' })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success) {
+            setProfiles((prev) => ({ ...prev, [a.id]: d.data }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [assignees]);
 
   const loadAssignees = async () => {
     setLoading(true);
@@ -342,7 +357,7 @@ export default function AssigneesPage() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton
           onClick={() => router.back()}
@@ -352,7 +367,7 @@ export default function AssigneesPage() {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          👥 负责人管理
+          负责人管理
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
@@ -380,19 +395,23 @@ export default function AssigneesPage() {
               <TableCell>姓名</TableCell>
               <TableCell>飞书用户ID</TableCell>
               <TableCell align="right">负责任务数</TableCell>
+              <TableCell align="right">本周消息</TableCell>
+              <TableCell align="right">活跃群数</TableCell>
+              <TableCell align="right">完成率</TableCell>
+              <TableCell align="right">活跃信号</TableCell>
               <TableCell align="right">操作</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} align="center">
+                <TableCell colSpan={8} align="center">
                   加载中...
                 </TableCell>
               </TableRow>
             ) : assignees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center">
+                <TableCell colSpan={8} align="center">
                   暂无负责人，点击"添加负责人"按钮创建
                 </TableCell>
               </TableRow>
@@ -415,10 +434,24 @@ export default function AssigneesPage() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    {assignee.feishuUserId || <em style={{ color: '#999' }}>未设置</em>}
+                    {assignee.feishuUserId || <em style={{ color: '#64748b' }}>未设置</em>}
                   </TableCell>
                   <TableCell align="right">
                     {assignee._count?.tasks || 0}
+                  </TableCell>
+                  <TableCell align="right">
+                    {profiles[assignee.id]?.messageCount ?? '-'}
+                  </TableCell>
+                  <TableCell align="right">
+                    {profiles[assignee.id]?.activeChatCount ?? '-'}
+                  </TableCell>
+                  <TableCell align="right">
+                    {profiles[assignee.id]?.completionRate != null
+                      ? `${profiles[assignee.id].completionRate}%`
+                      : '-'}
+                  </TableCell>
+                  <TableCell align="right">
+                    {profiles[assignee.id]?.unresolvedSignals ?? '-'}
                   </TableCell>
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <IconButton
@@ -611,6 +644,6 @@ export default function AssigneesPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 }
