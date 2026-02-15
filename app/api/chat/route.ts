@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
-import { getOpenAIClient, getOpenAIModel } from '@/lib/openai';
-import { BOT_TOOLS, executeBotTool, BOT_SYSTEM_PROMPT } from '@/lib/bot-tools';
-import OpenAI from 'openai';
+import { callClaude } from '@/lib/claude-bridge';
 
 const MAX_HISTORY = 20;
 
@@ -42,57 +40,13 @@ export async function POST(req: NextRequest) {
     history.push({ role: 'user', content: message.trim() });
     const trimmed = history.slice(-MAX_HISTORY);
 
-    // Build messages for OpenAI
-    const systemMsg = BOT_SYSTEM_PROMPT + '\n当前时间: ' + new Date().toLocaleString('zh-CN');
+    // Call Claude CLI
+    const claudeResult = await callClaude(
+      message.trim(),
+      conv?.claudeSessionId,
+    );
 
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: systemMsg },
-      ...trimmed.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-    ];
-
-    const openai = await getOpenAIClient();
-    const modelName = await getOpenAIModel();
-
-    // First call — model decides which tools to call
-    let response = await openai.chat.completions.create({
-      model: modelName,
-      messages,
-      tools: BOT_TOOLS,
-      temperature: 0.7,
-      max_completion_tokens: 1500,
-    });
-
-    let assistantMsg = response.choices[0]?.message;
-
-    // Handle tool calls — execute each, then send results back for synthesis
-    if (assistantMsg?.tool_calls && assistantMsg.tool_calls.length > 0) {
-      messages.push(assistantMsg as OpenAI.Chat.Completions.ChatCompletionMessageParam);
-
-      for (const tc of assistantMsg.tool_calls) {
-        if (tc.type !== 'function') continue;
-        const args = JSON.parse(tc.function.arguments || '{}');
-        const result = await executeBotTool(tc.function.name, args, prisma);
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: result,
-        });
-      }
-
-      // Second call — synthesize tool results into a natural answer
-      response = await openai.chat.completions.create({
-        model: modelName,
-        messages,
-        temperature: 0.7,
-        max_completion_tokens: 1500,
-      });
-      assistantMsg = response.choices[0]?.message;
-    }
-
-    const reply = assistantMsg?.content || '抱歉，我暂时无法处理这个请求。';
+    const reply = claudeResult.result;
 
     // Save history
     trimmed.push({ role: 'assistant', content: reply });
@@ -112,10 +66,12 @@ export async function POST(req: NextRequest) {
         source: 'web',
         messages: savedMessages as any,
         lastActiveAt: new Date(),
+        claudeSessionId: claudeResult.sessionId,
       },
       update: {
         messages: savedMessages as any,
         lastActiveAt: new Date(),
+        claudeSessionId: claudeResult.sessionId,
       },
     });
 
