@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Get pending topic suggestions from any briefing */
+/** Get pending topic suggestions */
 async function getPendingSuggestions() {
   try {
     return await prisma.suggestedTopic.findMany({
