@@ -19,6 +19,8 @@ import { connect, disconnect, setReconnectFailureCallback } from './websocket.js
 import { logger } from './logger.js';
 import { initNotifier, sendCookieExpiryAlert, checkAndSendDailyBriefing } from './notifier.js';
 import { initSignalDetector } from './signal-detector.js';
+import { initBotAgent } from './bot-agent.js';
+import { initBotReply } from './bot-reply.js';
 
 // Resolve paths relative to source file, not cwd (cwd varies by how we're started)
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -124,6 +126,9 @@ async function main() {
   const prisma = initMessageHandler();
   initNotifier(prisma);
   initSignalDetector(prisma);
+  initBotAgent(prisma);
+  initBotReply(prisma);
+  logger.info('[Main] Bot agent and reply initialized');
 
   // Get config from database
   const config = await getFeishuConfig();

@@ -11,6 +11,8 @@ import {
   getNameByNumericId,
 } from './open-api.js';
 import { detectSignals } from './signal-detector.js';
+import { processMessage } from './bot-agent.js';
+import { sendReply } from './bot-reply.js';
 
 let prisma: PrismaClient;
 
@@ -19,6 +21,23 @@ const blacklistedChatIds = new Set<string>();
 
 /** In-memory cache of user-assigned names (Assignee.feishuUserId → name) */
 const assigneeNameCache = new Map<string, string>();
+
+/** Cached bot name from config — avoids a DB query per message */
+let cachedBotName: string | null = null;
+let botNameFetchedAt = 0;
+
+async function getBotName(): Promise<string> {
+  const now = Date.now();
+  if (cachedBotName && now - botNameFetchedAt < 60000) return cachedBotName;
+  try {
+    const cfg = await prisma?.config.findUnique({ where: { key: 'feishu.botName' } });
+    cachedBotName = cfg?.value || 'POA';
+    botNameFetchedAt = now;
+  } catch {
+    cachedBotName = 'POA';
+  }
+  return cachedBotName;
+}
 
 export async function refreshAssigneeNames(): Promise<void> {
   const assignees = await prisma.assignee.findMany({
@@ -156,6 +175,27 @@ export async function handleMessage(msg: DecodedMessage): Promise<void> {
       content: msg.content,
       chatType: msg.chatType,
     });
+
+    // Bot message detection (fire-and-forget)
+    const botName = await getBotName();
+    const isBotDirected = msg.chatType === 'private' ||
+      (msg.content && (
+        msg.content.toLowerCase().includes(`@${botName.toLowerCase()}`) ||
+        msg.content.includes('@POA') ||
+        msg.content.includes('@poa')
+      ));
+
+    if (isBotDirected && msg.content) {
+      const cleanContent = msg.content
+        .replace(new RegExp(`@${botName}\\s*`, 'gi'), '')
+        .replace(/@POA\s*/gi, '')
+        .trim();
+      if (cleanContent) {
+        processMessage(msg.chatId, cleanContent)
+          .then(reply => sendReply(msg.chatId, reply))
+          .catch(err => logger.error(`[Bot] Error: ${err.message}`));
+      }
+    }
 
     logger.info(
       `Message saved: [${msg.chatType}] ${displayName}: ${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}`
