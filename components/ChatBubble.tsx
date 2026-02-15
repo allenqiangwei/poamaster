@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Box,
   Fab,
@@ -13,9 +13,11 @@ import {
   ListItemSecondaryAction,
   TextField,
   CircularProgress,
+  Badge,
   Fade,
   Zoom,
   Divider,
+  Button,
 } from '@mui/material';
 import {
   SmartToy as SmartToyIcon,
@@ -24,6 +26,7 @@ import {
   ArrowBack as ArrowBackIcon,
   Send as SendIcon,
   Delete as DeleteIcon,
+  Refresh as RetryIcon,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { designTokens as dt } from '@/lib/theme';
@@ -33,12 +36,17 @@ interface Thread {
   chatId: string;
   title: string;
   lastActiveAt: string;
+  hasUnread: boolean;
   preview: string;
 }
 
 interface Message {
+  id?: string;
   role: 'user' | 'assistant';
-  content: string;
+  content: string | null;
+  status?: string;
+  progress?: string | null;
+  errorMessage?: string | null;
 }
 
 export default function ChatBubble() {
@@ -48,21 +56,98 @@ export default function ChatBubble() {
   const [activeThread, setActiveThread] = useState<{ chatId: string; title: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [threadsLoading, setThreadsLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastPollTime = useRef<string>(new Date().toISOString());
+
+  // Compute whether any messages are still pending/processing
+  const hasPending = useMemo(
+    () => messages.some((m) => m.status === 'pending' || m.status === 'processing'),
+    [messages]
+  );
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load threads when panel opens
+  // Load threads when panel opens to threads view
   useEffect(() => {
     if (open && view === 'threads') {
       loadThreads();
     }
   }, [open, view]);
+
+  // ─── Polling logic ───────────────────────────────────────────
+  useEffect(() => {
+    // Chat closed → poll unread every 10s
+    if (!open) {
+      const interval = setInterval(pollUnread, 10000);
+      // Also poll once immediately on close
+      pollUnread();
+      return () => clearInterval(interval);
+    }
+
+    // Chat open, thread list view → no message polling needed, but keep unread fresh
+    if (view === 'threads') {
+      return;
+    }
+
+    // Chat open, in a conversation
+    if (view === 'chat' && activeThread) {
+      const delay = hasPending ? 3000 : 10000;
+      const interval = setInterval(pollMessages, delay);
+      return () => clearInterval(interval);
+    }
+  }, [open, view, activeThread, hasPending]);
+
+  async function pollUnread() {
+    try {
+      const res = await fetch('/api/chat/unread');
+      const json = await res.json();
+      if (json.success) {
+        setUnreadCount(json.data.count);
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
+  async function pollMessages() {
+    if (!activeThread) return;
+    try {
+      const res = await fetch(
+        `/api/chat/poll?threadId=${activeThread.chatId}&since=${encodeURIComponent(lastPollTime.current)}`
+      );
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { updates, unreadCount: uc } = json.data;
+        if (typeof uc === 'number') setUnreadCount(uc);
+        if (Array.isArray(updates) && updates.length > 0) {
+          setMessages((prev) => {
+            const next = [...prev];
+            for (const upd of updates) {
+              const idx = next.findIndex((m) => m.id === upd.id);
+              if (idx >= 0) {
+                next[idx] = { ...next[idx], ...upd };
+              } else {
+                // New message from server not yet in our list
+                next.push(upd);
+              }
+            }
+            return next;
+          });
+          lastPollTime.current = new Date().toISOString();
+        }
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
+  // ─── Thread operations ───────────────────────────────────────
 
   async function loadThreads() {
     setThreadsLoading(true);
@@ -80,6 +165,7 @@ export default function ChatBubble() {
   async function openThread(thread: Thread) {
     setActiveThread({ chatId: thread.chatId, title: thread.title });
     setView('chat');
+    lastPollTime.current = new Date().toISOString();
     try {
       const res = await fetch(`/api/chat/${thread.chatId}`);
       const json = await res.json();
@@ -89,45 +175,16 @@ export default function ChatBubble() {
     } catch (err) {
       console.error('Failed to load thread:', err);
     }
+    // Opening a thread marks messages as read on the server.
+    // Refresh unread count after a short delay to let the server process.
+    setTimeout(pollUnread, 500);
   }
 
   function startNewChat() {
     setActiveThread(null);
     setMessages([]);
     setView('chat');
-  }
-
-  async function sendMessage() {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    setInput('');
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          threadId: activeThread?.chatId || undefined,
-          message: text,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setMessages((prev) => [...prev, { role: 'assistant', content: json.data.reply }]);
-        if (!activeThread) {
-          setActiveThread({ chatId: json.data.threadId, title: json.data.title });
-        }
-      } else {
-        setMessages((prev) => [...prev, { role: 'assistant', content: json.error || '抱歉，请求失败，请重试。' }]);
-      }
-    } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: '网络错误，请检查连接后重试。' }]);
-    } finally {
-      setLoading(false);
-    }
+    lastPollTime.current = new Date().toISOString();
   }
 
   async function deleteThread(chatId: string, e: React.MouseEvent) {
@@ -146,6 +203,118 @@ export default function ChatBubble() {
     setMessages([]);
   }
 
+  function handleOpen() {
+    setOpen(true);
+  }
+
+  // ─── Send message (optimistic) ──────────────────────────────
+
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+
+    setInput('');
+    setSending(true);
+
+    const userTempId = `temp-${Date.now()}`;
+    const assistantTempId = `temp-assistant-${Date.now()}`;
+
+    // Optimistically add user message + assistant placeholder
+    const userMsg: Message = { id: userTempId, role: 'user', content: text, status: 'done' };
+    const assistantMsg: Message = {
+      id: assistantTempId,
+      role: 'assistant',
+      content: null,
+      status: 'pending',
+      progress: '排队中...',
+    };
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threadId: activeThread?.chatId || undefined,
+          message: text,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        const { threadId, messageId, userMessageId, title } = json.data;
+        // Replace temp ids with real ids
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === userTempId) return { ...m, id: userMessageId };
+            if (m.id === assistantTempId) return { ...m, id: messageId, status: 'processing', progress: '正在思考...' };
+            return m;
+          })
+        );
+        if (!activeThread) {
+          setActiveThread({ chatId: threadId, title: title || '新对话' });
+        }
+        lastPollTime.current = new Date().toISOString();
+      } else {
+        // Server returned an error
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === assistantTempId) {
+              return { ...m, status: 'error', progress: null, errorMessage: json.error || '请求失败，请重试。' };
+            }
+            return m;
+          })
+        );
+      }
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id === assistantTempId) {
+            return { ...m, status: 'error', progress: null, errorMessage: '网络错误，请检查连接后重试。' };
+          }
+          return m;
+        })
+      );
+    } finally {
+      setSending(false);
+    }
+  }, [input, sending, activeThread]);
+
+  // ─── Retry failed message ───────────────────────────────────
+
+  function retryMessage(errorMsgId?: string) {
+    if (!errorMsgId) return;
+
+    setMessages((prev) => {
+      // Find the error assistant message
+      const errIdx = prev.findIndex((m) => m.id === errorMsgId);
+      if (errIdx < 0) return prev;
+
+      // The user message is the one right before it
+      const userIdx = errIdx - 1;
+      if (userIdx < 0 || prev[userIdx].role !== 'user') return prev;
+
+      const userContent = prev[userIdx].content;
+      // Remove both messages
+      const next = prev.filter((_, i) => i !== errIdx && i !== userIdx);
+
+      // Re-trigger send with that content (after state update)
+      if (userContent) {
+        setTimeout(() => {
+          setInput(userContent);
+          // We need to trigger send after input is set
+          setTimeout(() => {
+            const sendBtn = document.querySelector('[data-chat-send]') as HTMLButtonElement;
+            sendBtn?.click();
+          }, 50);
+        }, 0);
+      }
+
+      return next;
+    });
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────
+
   function formatTime(dateStr: string) {
     const d = new Date(dateStr);
     const now = new Date();
@@ -158,27 +327,124 @@ export default function ChatBubble() {
     return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
   }
 
+  // ─── Render message bubble ──────────────────────────────────
+
+  function renderMessage(msg: Message, index: number) {
+    const isUser = msg.role === 'user';
+    const isError = msg.status === 'error';
+    const isProcessing = msg.status === 'pending' || msg.status === 'processing';
+
+    return (
+      <Box
+        key={msg.id || index}
+        sx={{
+          display: 'flex',
+          justifyContent: isUser ? 'flex-end' : 'flex-start',
+        }}
+      >
+        <Box
+          sx={{
+            maxWidth: '80%',
+            px: 1.5,
+            py: 1,
+            borderRadius: 2,
+            backgroundColor: isUser
+              ? dt.accent.main
+              : isError
+                ? dt.danger.subtle
+                : dt.bg.deep,
+            color: isUser
+              ? '#fff'
+              : isError
+                ? dt.danger.dark
+                : dt.text.primary,
+            border: isError ? `1px solid ${alpha(dt.danger.main, 0.2)}` : 'none',
+          }}
+        >
+          {/* Processing state: spinner + progress text */}
+          {isProcessing && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CircularProgress size={14} sx={{ color: dt.accent.main }} />
+              <Typography variant="caption" sx={{ color: dt.text.secondary }}>
+                {msg.progress || '处理中...'}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Error state: error text + retry button */}
+          {isError && (
+            <Box>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mb: 0.5 }}>
+                {msg.errorMessage || '处理失败'}
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<RetryIcon sx={{ fontSize: 14 }} />}
+                onClick={() => retryMessage(msg.id)}
+                sx={{
+                  color: dt.danger.main,
+                  textTransform: 'none',
+                  fontSize: '0.75rem',
+                  px: 1,
+                  py: 0.25,
+                  minWidth: 0,
+                  '&:hover': { backgroundColor: alpha(dt.danger.main, 0.08) },
+                }}
+              >
+                重试
+              </Button>
+            </Box>
+          )}
+
+          {/* Done / normal content */}
+          {!isProcessing && !isError && (
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {msg.content}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    );
+  }
+
+  // ─── Render ──────────────────────────────────────────────────
+
   return (
     <>
-      {/* Floating Action Button */}
+      {/* Floating Action Button with Badge */}
       <Zoom in={!open}>
-        <Fab
-          onClick={() => setOpen(true)}
+        <Badge
+          badgeContent={unreadCount}
+          color="error"
+          invisible={unreadCount === 0}
           sx={{
             position: 'fixed',
             bottom: 24,
             right: 24,
             zIndex: 1300,
-            background: `linear-gradient(135deg, ${dt.accent.main} 0%, ${dt.purple.main} 100%)`,
-            color: '#fff',
-            boxShadow: `0 4px 20px ${alpha(dt.accent.main, 0.35)}`,
-            '&:hover': {
-              background: `linear-gradient(135deg, ${dt.accent.dark} 0%, ${dt.purple.dark} 100%)`,
+            '& .MuiBadge-badge': {
+              top: 6,
+              right: 6,
+              minWidth: 18,
+              height: 18,
+              fontSize: '0.7rem',
             },
           }}
         >
-          <SmartToyIcon />
-        </Fab>
+          <Fab
+            onClick={handleOpen}
+            sx={{
+              background: `linear-gradient(135deg, ${dt.accent.main} 0%, ${dt.purple.main} 100%)`,
+              color: '#fff',
+              boxShadow: `0 4px 20px ${alpha(dt.accent.main, 0.35)}`,
+              '&:hover': {
+                background: `linear-gradient(135deg, ${dt.accent.dark} 0%, ${dt.purple.dark} 100%)`,
+              },
+            }}
+          >
+            <SmartToyIcon />
+          </Fab>
+        </Badge>
       </Zoom>
 
       {/* Chat Window */}
@@ -258,9 +524,25 @@ export default function ChatBubble() {
                     {threads.map((t) => (
                       <ListItemButton key={t.chatId} onClick={() => openThread(t)} sx={{ pr: 6 }}>
                         <ListItemText
-                          primary={t.title}
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {t.hasUnread && (
+                                <Box
+                                  sx={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    backgroundColor: dt.danger.main,
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              )}
+                              <Typography variant="body2" fontWeight={600} noWrap>
+                                {t.title}
+                              </Typography>
+                            </Box>
+                          }
                           secondary={`${t.preview} · ${formatTime(t.lastActiveAt)}`}
-                          primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
                           secondaryTypographyProps={{ variant: 'caption', noWrap: true }}
                         />
                         <ListItemSecondaryAction>
@@ -286,61 +568,12 @@ export default function ChatBubble() {
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* Messages */}
               <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {messages.length === 0 && !loading && (
+                {messages.length === 0 && !sending && (
                   <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                     有什么我可以帮你的？
                   </Typography>
                 )}
-                {messages.map((msg, i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      display: 'flex',
-                      justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        maxWidth: '80%',
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        backgroundColor:
-                          msg.role === 'user'
-                            ? dt.accent.main
-                            : dt.bg.deep,
-                        color:
-                          msg.role === 'user'
-                            ? '#fff'
-                            : dt.text.primary,
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {msg.content}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-                {loading && (
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                    <Box
-                      sx={{
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        backgroundColor: dt.bg.deep,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                      }}
-                    >
-                      <CircularProgress size={16} />
-                      <Typography variant="caption" color="text.secondary">
-                        Claude 正在思考...
-                      </Typography>
-                    </Box>
-                  </Box>
-                )}
+                {messages.map((msg, i) => renderMessage(msg, i))}
                 <div ref={messagesEndRef} />
               </Box>
 
@@ -358,13 +591,14 @@ export default function ChatBubble() {
                       sendMessage();
                     }
                   }}
-                  disabled={loading}
+                  disabled={sending}
                   multiline
                   maxRows={3}
                 />
                 <IconButton
+                  data-chat-send
                   onClick={sendMessage}
-                  disabled={!input.trim() || loading}
+                  disabled={!input.trim() || sending}
                   sx={{
                     color: dt.accent.main,
                     '&:hover': { backgroundColor: dt.accent.subtle },
