@@ -10,6 +10,7 @@ import {
   registerMentionMapping,
   getNameByNumericId,
 } from './open-api.js';
+import { detectSignals } from './signal-detector.js';
 
 let prisma: PrismaClient;
 
@@ -146,6 +147,15 @@ export async function handleMessage(msg: DecodedMessage): Promise<void> {
     });
 
     messageCount++;
+
+    // Detect real-time operational signals (fire-and-forget)
+    detectSignals({
+      messageId: msg.messageId,
+      chatId: msg.chatId,
+      senderName: displayName,
+      content: msg.content,
+      chatType: msg.chatType,
+    });
 
     logger.info(
       `Message saved: [${msg.chatType}] ${displayName}: ${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}`

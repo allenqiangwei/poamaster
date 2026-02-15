@@ -8,7 +8,8 @@
 import { PrismaClient } from '@prisma/client';
 import { createDecipheriv } from 'crypto';
 import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { authenticate } from './auth.js';
 import { initDecoder } from './decoder.js';
 import { initMessageHandler, shutdownMessageHandler, refreshBlacklist, refreshAssigneeNames } from './message-handler.js';
@@ -16,10 +17,14 @@ import { initNameResolver, fetchChatFeed, backfillNames } from './name-resolver.
 import { initOpenApi, buildNameDirectory, refreshNames } from './open-api.js';
 import { connect, disconnect, setReconnectFailureCallback } from './websocket.js';
 import { logger } from './logger.js';
-import { initNotifier, sendCookieExpiryAlert } from './notifier.js';
+import { initNotifier, sendCookieExpiryAlert, checkAndSendDailyBriefing } from './notifier.js';
+import { initSignalDetector } from './signal-detector.js';
 
-// Load .env from project root (two levels up from services/feishu-listener/)
-const ROOT_DIR = resolve(process.cwd(), '../..');
+// Resolve paths relative to source file, not cwd (cwd varies by how we're started)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const LISTENER_DIR = resolve(__dirname, '..');  // services/feishu-listener/
+const ROOT_DIR = resolve(LISTENER_DIR, '../..');        // project root
+
 const envPath = join(ROOT_DIR, '.env');
 if (existsSync(envPath)) {
   for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
@@ -41,7 +46,22 @@ if (existsSync(envPath)) {
   logger.info(`Loaded env from ${envPath}`);
 }
 
-const PID_FILE = join(process.cwd(), '.pid');
+const PID_FILE = join(LISTENER_DIR, '.pid');
+
+// Single-instance lock: check if another listener is already running
+if (existsSync(PID_FILE)) {
+  const existingPid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10);
+  if (existingPid && existingPid !== process.pid) {
+    try {
+      process.kill(existingPid, 0); // Check if process exists (signal 0 = no-op)
+      logger.error(`Another listener is already running (PID ${existingPid}). Exiting.`);
+      process.exit(1);
+    } catch {
+      // Process doesn't exist — stale PID file, safe to continue
+      logger.info(`Stale PID file found (PID ${existingPid} not running), taking over`);
+    }
+  }
+}
 
 // Write PID file for process management
 writeFileSync(PID_FILE, String(process.pid));
@@ -103,6 +123,7 @@ async function main() {
   initDecoder();
   const prisma = initMessageHandler();
   initNotifier(prisma);
+  initSignalDetector(prisma);
 
   // Get config from database
   const config = await getFeishuConfig();
@@ -159,6 +180,7 @@ async function main() {
       await backfillNames();
       await refreshBlacklist();
       await refreshAssigneeNames();
+      await checkAndSendDailyBriefing();
     } catch {
       // Non-critical
     }
