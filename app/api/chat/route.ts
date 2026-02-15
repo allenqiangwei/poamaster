@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
-import { callClaude } from '@/lib/claude-bridge';
+import { startClaudeJob } from '@/lib/claude-worker';
 
-const MAX_HISTORY = 20;
-
-// POST /api/chat — Send a message (creates thread if no threadId)
+// POST /api/chat — Send a message (async: returns immediately, processes in background)
 export async function POST(req: NextRequest) {
   const token = req.cookies.get('session')?.value;
   if (!token) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -19,6 +17,8 @@ export async function POST(req: NextRequest) {
     if (!message?.trim()) {
       return NextResponse.json({ success: false, error: 'Message is required' }, { status: 400 });
     }
+
+    const trimmedMessage = message.trim();
 
     // Load or create conversation
     let chatId = threadId;
@@ -35,57 +35,62 @@ export async function POST(req: NextRequest) {
       chatId = `web-${crypto.randomUUID()}`;
     }
 
-    const history: Array<{ role: string; content: string }> =
-      (conv?.messages as Array<{ role: string; content: string }>) || [];
-    history.push({ role: 'user', content: message.trim() });
-    const trimmed = history.slice(-MAX_HISTORY);
-
-    // Call Claude CLI
-    const claudeResult = await callClaude(
-      message.trim(),
-      conv?.claudeSessionId,
-    );
-
-    const reply = claudeResult.result || '(Claude 未返回内容)';
-
-    // Save history
-    trimmed.push({ role: 'assistant', content: reply });
-    const savedMessages = trimmed.slice(-MAX_HISTORY);
-
-    // Generate title for new conversations (first message truncated to 50 chars)
+    // Generate title for new conversations (first 50 chars of message)
     let title = conv?.title || null;
     if (isNew) {
-      title = message.trim().slice(0, 50) + (message.trim().length > 50 ? '...' : '');
+      title = trimmedMessage.slice(0, 50) + (trimmedMessage.length > 50 ? '...' : '');
     }
 
-    await prisma.botConversation.upsert({
+    // Upsert conversation
+    conv = await prisma.botConversation.upsert({
       where: { chatId },
       create: {
         chatId,
         title,
         source: 'web',
-        messages: savedMessages as any,
         lastActiveAt: new Date(),
-        claudeSessionId: claudeResult.sessionId,
       },
       update: {
-        messages: savedMessages as any,
         lastActiveAt: new Date(),
-        claudeSessionId: claudeResult.sessionId,
       },
     });
 
+    // Create user message
+    const userMsg = await prisma.botMessage.create({
+      data: {
+        conversationId: conv.id,
+        role: 'user',
+        content: trimmedMessage,
+        status: 'done',
+      },
+    });
+
+    // Create assistant message (pending — will be filled by background worker)
+    const assistantMsg = await prisma.botMessage.create({
+      data: {
+        conversationId: conv.id,
+        role: 'assistant',
+        status: 'pending',
+        progress: '排队中...',
+      },
+    });
+
+    // Fire-and-forget: start Claude background job
+    startClaudeJob(assistantMsg.id, trimmedMessage, conv.claudeSessionId);
+
     return NextResponse.json({
       success: true,
-      data: { threadId: chatId, reply, title },
+      data: {
+        threadId: chatId,
+        messageId: assistantMsg.id,
+        userMessageId: userMsg.id,
+        status: 'processing',
+        title,
+      },
     });
   } catch (error: any) {
     console.error('Chat API error:', error?.message || error);
-    const isTimeout = error?.message?.includes('timed out');
-    const msg = isTimeout
-      ? 'Claude 响应超时，请稍后重试或缩短问题'
-      : 'Failed to process message';
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to process message' }, { status: 500 });
   }
 }
 
@@ -105,19 +110,27 @@ export async function GET(req: NextRequest) {
         chatId: true,
         title: true,
         lastActiveAt: true,
-        messages: true,
+        hasUnread: true,
+        botMessages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            content: true,
+            role: true,
+          },
+        },
       },
     });
 
     const data = threads.map((t) => {
-      const msgs = t.messages as Array<{ role: string; content: string }>;
-      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      const lastMsg = t.botMessages[0] || null;
       return {
         id: t.id,
         chatId: t.chatId,
         title: t.title || '新对话',
         lastActiveAt: t.lastActiveAt,
-        preview: lastMsg ? lastMsg.content.slice(0, 50) : '',
+        hasUnread: t.hasUnread,
+        preview: lastMsg?.content ? lastMsg.content.slice(0, 50) : '',
       };
     });
 
