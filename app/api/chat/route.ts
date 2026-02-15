@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       conv?.claudeSessionId,
     );
 
-    const reply = claudeResult.result;
+    const reply = claudeResult.result || '(Claude 未返回内容)';
 
     // Save history
     trimmed.push({ role: 'assistant', content: reply });

@@ -73,11 +73,14 @@ export async function callClaude(
 
       try {
         const parsed = JSON.parse(stdout);
+        if (!parsed.result) {
+          console.warn('[claude-bridge] Empty result. Full response:', stdout.slice(0, 500));
+        }
         resolve({
-          result: parsed.result,
+          result: parsed.result || '',
           sessionId: parsed.session_id,
-          cost: parsed.total_cost_usd,
-          durationMs: parsed.duration_ms,
+          cost: parsed.total_cost_usd ?? 0,
+          durationMs: parsed.duration_ms ?? 0,
         });
       } catch (parseError) {
         console.error('[claude-bridge] Failed to parse stdout:', stdout.slice(0, 500));
