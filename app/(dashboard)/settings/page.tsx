@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Paper,
   Typography,
   TextField,
@@ -38,8 +37,13 @@ export default function SettingsPage() {
     'feishu.appId': '',
     'feishu.appSecret': '',
     'feishu.chatId': '',
+    'feishu.botName': 'POA',
     'feishu.enabled': 'true',
-    'feishu.cookie': ''
+    'feishu.cookie': '',
+    'serper.apiKey': '',
+    'x.username': '',
+    'x.password': '',
+    'x.email': '',
   });
   const [availableModels, setAvailableModels] = useState<OpenAIModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -123,7 +127,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 900, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton
           onClick={() => router.back()}
@@ -133,7 +137,7 @@ export default function SettingsPage() {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4">
-          ⚙️ 系统配置
+          系统配置
         </Typography>
       </Box>
 
@@ -266,6 +270,15 @@ export default function SettingsPage() {
             }
             helperText="接收每日任务通知的群聊 ID"
           />
+          <TextField
+            label="机器人名称"
+            fullWidth
+            value={configs['feishu.botName']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'feishu.botName': e.target.value })
+            }
+            helperText="在飞书群聊中 @此名称 触发机器人回复（默认: POA）"
+          />
         </Box>
       </Paper>
 
@@ -295,6 +308,70 @@ export default function SettingsPage() {
         />
       </Paper>
 
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          洞察简报配置
+        </Typography>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="caption">
+            配置 Serper API Key 后可启用洞察简报的互联网搜索功能。
+            访问 https://serper.dev 注册并获取 API Key（$50/月可查询 5 万次）。
+          </Typography>
+        </Alert>
+        <TextField
+          label="Serper API Key"
+          fullWidth
+          type="password"
+          value={configs['serper.apiKey']}
+          onChange={(e) =>
+            setConfigs({ ...configs, 'serper.apiKey': e.target.value })
+          }
+          helperText="用于洞察简报的互联网搜索（Google Search API）"
+        />
+      </Paper>
+
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          X (Twitter) 舆情采集
+        </Typography>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography variant="caption">
+            使用专用小号登录，主账号有被封风险。采集器会用此账号搜索游戏关键词相关推文，每 4 小时采集一次。
+          </Typography>
+        </Alert>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="X 用户名"
+            fullWidth
+            value={configs['x.username']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'x.username': e.target.value })
+            }
+            helperText="X/Twitter 账号用户名（不含 @）"
+          />
+          <TextField
+            label="X 密码"
+            fullWidth
+            type="password"
+            value={configs['x.password']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'x.password': e.target.value })
+            }
+            helperText="加密存储"
+          />
+          <TextField
+            label="X 邮箱"
+            fullWidth
+            type="password"
+            value={configs['x.email']}
+            onChange={(e) =>
+              setConfigs({ ...configs, 'x.email': e.target.value })
+            }
+            helperText="登录验证用邮箱（加密存储）"
+          />
+        </Box>
+      </Paper>
+
       <Box sx={{ mt: 3 }}>
         <Button
           variant="contained"
@@ -305,6 +382,6 @@ export default function SettingsPage() {
           {loading ? '保存中...' : '保存配置'}
         </Button>
       </Box>
-    </Container>
+    </Box>
   );
 }
