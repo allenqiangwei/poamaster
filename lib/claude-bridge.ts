@@ -13,24 +13,8 @@ interface ClaudeResponse {
   durationMs: number;
 }
 
-export async function callClaude(
-  message: string,
-  sessionId?: string | null,
-): Promise<ClaudeResponse> {
-  const args: string[] = [];
-
-  if (sessionId) {
-    args.push('--resume', sessionId);
-  }
-
-  args.push(
-    '-p', message,
-    '--output-format', 'json',
-    '--max-turns', MAX_TURNS,
-    '--model', DEFAULT_MODEL,
-  );
-
-  return new Promise<ClaudeResponse>((resolve, reject) => {
+function runClaude(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
     const child = spawn(CLAUDE_PATH, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
@@ -63,42 +47,68 @@ export async function callClaude(
       clearTimeout(timer);
       if (settled) return;
       settled = true;
-
-      if (code !== 0) {
-        console.error('[claude-bridge] exit code:', code);
-        if (stderr) console.error('[claude-bridge] stderr:', stderr);
-        reject(new Error(`Claude CLI exited with code ${code}`));
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(stdout);
-        let result = parsed.result || '';
-        if (!result && parsed.subtype === 'error_max_turns') {
-          console.warn('[claude-bridge] Hit max turns limit. Turns:', parsed.num_turns);
-          result = '抱歉，这个问题比较复杂，我在处理过程中达到了回合数限制。请尝试简化问题或拆分成多个小问题。';
-        } else if (!result) {
-          console.warn('[claude-bridge] Empty result. Full response:', stdout.slice(0, 500));
-        }
-        resolve({
-          result,
-          sessionId: parsed.session_id,
-          cost: parsed.total_cost_usd ?? 0,
-          durationMs: parsed.duration_ms ?? 0,
-        });
-      } catch (parseError) {
-        console.error('[claude-bridge] Failed to parse stdout:', stdout.slice(0, 500));
-        reject(new Error(`Failed to parse Claude CLI output: ${(parseError as Error).message}`));
-      }
+      resolve({ code, stdout, stderr });
     });
 
     child.on('error', (err) => {
       clearTimeout(timer);
       if (!settled) {
         settled = true;
-        console.error('[claude-bridge] spawn error:', err.message);
         reject(new Error(`Claude CLI spawn failed: ${err.message}`));
       }
     });
   });
+}
+
+function parseClaudeOutput(stdout: string): ClaudeResponse {
+  const parsed = JSON.parse(stdout);
+  let result = parsed.result || '';
+  if (!result && parsed.subtype === 'error_max_turns') {
+    console.warn('[claude-bridge] Hit max turns limit. Turns:', parsed.num_turns);
+    result = '抱歉，这个问题比较复杂，我在处理过程中达到了回合数限制。请尝试简化问题或拆分成多个小问题。';
+  } else if (!result) {
+    console.warn('[claude-bridge] Empty result. subtype:', parsed.subtype);
+  }
+  return {
+    result,
+    sessionId: parsed.session_id,
+    cost: parsed.total_cost_usd ?? 0,
+    durationMs: parsed.duration_ms ?? 0,
+  };
+}
+
+export async function callClaude(
+  message: string,
+  sessionId?: string | null,
+): Promise<ClaudeResponse> {
+  const baseArgs = [
+    '-p', message,
+    '--output-format', 'json',
+    '--max-turns', MAX_TURNS,
+    '--model', DEFAULT_MODEL,
+  ];
+
+  // If resuming a session, try with --resume first
+  if (sessionId) {
+    const resumeArgs = ['--resume', sessionId, ...baseArgs];
+    try {
+      const { code, stdout, stderr } = await runClaude(resumeArgs);
+      if (code !== 0) {
+        console.warn('[claude-bridge] Resume failed (code ' + code + '), falling back to new session');
+      } else {
+        return parseClaudeOutput(stdout);
+      }
+    } catch (err: any) {
+      console.warn('[claude-bridge] Resume timed out or failed:', err.message, '— retrying without resume');
+    }
+  }
+
+  // New session (or fallback after resume failure)
+  const { code, stdout, stderr } = await runClaude(baseArgs);
+  if (code !== 0) {
+    console.error('[claude-bridge] exit code:', code);
+    if (stderr) console.error('[claude-bridge] stderr:', stderr);
+    throw new Error(`Claude CLI exited with code ${code}`);
+  }
+  return parseClaudeOutput(stdout);
 }
