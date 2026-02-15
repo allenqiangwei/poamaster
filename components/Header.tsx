@@ -22,12 +22,14 @@ import {
   Chat as FeishuIcon,
   Insights as InsightsIcon,
   MonitorHeart as MonitorHeartIcon,
+  Gavel as GavelIcon,
 } from '@mui/icons-material';
 import { designTokens as dt } from '@/lib/theme';
 
 const NAV_ITEMS = [
   { path: '/', label: '首页', icon: <HomeIcon fontSize="small" />, exact: true },
   { path: '/todo', label: '任务', icon: <ListIcon fontSize="small" /> },
+  { path: '/decisions', label: '决策日志', icon: <GavelIcon fontSize="small" /> },
   { path: '/assignees', label: '团队', icon: <PeopleIcon fontSize="small" /> },
   { path: '/pulse', label: '项目', icon: <PulseIcon fontSize="small" /> },
   { path: '/roundtable', label: '圆桌', icon: <RoundtableIcon fontSize="small" /> },
