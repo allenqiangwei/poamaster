@@ -53,12 +53,15 @@ model Task {
   status     TaskStatus @default(TODO)
   assigneeId String?
   assignee   Assignee?  @relation(fields: [assigneeId], references: [id])
+  decisionId String?
+  decision   Decision?  @relation(fields: [decisionId], references: [id])
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
   @@index([status])
   @@index([dueDate])
   @@index([assigneeId])
+  @@index([decisionId])
 }
 
 // 任务状态枚举
@@ -795,4 +798,34 @@ model SentimentDailyStat {
   game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   @@unique([gameId, date])
+}
+
+// ==================== Decision Log (决策日志) ====================
+
+enum DecisionStatus {
+  PENDING
+  EXECUTING
+  COMPLETED
+  REVISED
+}
+
+model Decision {
+  id          String         @id @default(cuid())
+  title       String
+  context     String?        @db.Text
+  outcome     String?        @db.Text
+  status      DecisionStatus @default(PENDING)
+  madeAt      DateTime
+  madeBy      String?
+  reviewDate  DateTime?
+  notes       String?        @db.Text
+  signalId    String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tasks       Task[]
+
+  @@index([status])
+  @@index([madeAt])
+  @@index([reviewDate])
 }
