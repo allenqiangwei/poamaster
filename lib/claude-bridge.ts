@@ -5,6 +5,7 @@ const DEFAULT_MODEL = 'sonnet';
 const MAX_TURNS = '15';
 const TIMEOUT_MS = 180000;
 const MAX_BUFFER = 10 * 1024 * 1024;
+const SYSTEM_PROMPT = '你是 POA Master 的 AI 助手。直接回答用户的问题，不要使用 AskUserQuestion 工具，不要反问用户。如果信息不足，做出合理假设后直接给出答案。用中文回答。';
 
 interface ClaudeResponse {
   result: string;
@@ -62,12 +63,13 @@ function runClaude(args: string[]): Promise<{ code: number | null; stdout: strin
 
 function parseClaudeOutput(stdout: string): ClaudeResponse {
   const parsed = JSON.parse(stdout);
+  console.log('[claude-bridge] subtype:', parsed.subtype, 'turns:', parsed.num_turns, 'cost: $' + (parsed.total_cost_usd ?? 0).toFixed(4), 'result_len:', (parsed.result || '').length);
   let result = parsed.result || '';
   if (!result && parsed.subtype === 'error_max_turns') {
     console.warn('[claude-bridge] Hit max turns limit. Turns:', parsed.num_turns);
     result = '抱歉，这个问题比较复杂，我在处理过程中达到了回合数限制。请尝试简化问题或拆分成多个小问题。';
   } else if (!result) {
-    console.warn('[claude-bridge] Empty result. subtype:', parsed.subtype);
+    console.warn('[claude-bridge] Empty result! Full stdout:', stdout.slice(0, 1000));
   }
   return {
     result,
@@ -86,6 +88,7 @@ export async function callClaude(
     '--output-format', 'json',
     '--max-turns', MAX_TURNS,
     '--model', DEFAULT_MODEL,
+    '--append-system-prompt', SYSTEM_PROMPT,
   ];
 
   // If resuming a session, try with --resume first
