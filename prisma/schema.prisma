@@ -829,3 +829,16 @@ model Decision {
   @@index([madeAt])
   @@index([reviewDate])
 }
+
+// ==================== Feishu Bot (自然语言助手) ====================
+
+model BotConversation {
+  id           String   @id @default(cuid())
+  chatId       String   @unique
+  messages     Json     @default("[]")
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([lastActiveAt])
+}
