@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // 解析请求体
     const body = await request.json();
-    const { title, dod, dueDate, status, assigneeId } = body;
+    const { title, dod, dueDate, status, assigneeId, decisionId } = body;
 
     // 验证必填字段
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -163,6 +163,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 验证决策是否存在
+    if (decisionId) {
+      const decision = await prisma.decision.findUnique({
+        where: { id: decisionId },
+      });
+      if (!decision) {
+        return NextResponse.json(
+          { success: false, error: 'Decision not found' },
+          { status: 404 }
+        );
+      }
+    }
+
     // 创建任务
     const task = await prisma.task.create({
       data: {
@@ -171,6 +184,7 @@ export async function POST(request: NextRequest) {
         dueDate: dueDate ? new Date(dueDate) : null,
         status: status || TaskStatus.TODO,
         assigneeId: assigneeId || null,
+        decisionId: decisionId || null,
       },
       include: {
         assignee: {
