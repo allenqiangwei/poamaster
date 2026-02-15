@@ -67,6 +67,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 查询近一周飞书活动和信号数据
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const messageFilter: any = { timestamp: { gte: since } };
+    if (assignee.feishuUserId) {
+      messageFilter.OR = [
+        { senderName: assignee.name },
+        { senderId: assignee.feishuUserId },
+      ];
+    } else {
+      messageFilter.senderName = assignee.name;
+    }
+
+    const [messageCount, activeChatIds, signals] = await Promise.all([
+      prisma.feishuMessage.count({ where: messageFilter }),
+      prisma.feishuMessage.groupBy({
+        by: ['chatId'],
+        where: messageFilter,
+      }),
+      prisma.chatSignal.findMany({
+        where: {
+          isResolved: false,
+          detectedAt: { gte: since },
+          relatedUser: assignee.name,
+        },
+        take: 5,
+        orderBy: { detectedAt: 'desc' },
+        include: { chat: { select: { name: true } } },
+      }),
+    ]);
+
+    // 从活跃群聊获取情绪数据
+    const chatIds = activeChatIds.map(c => c.chatId);
+    const sentimentData = chatIds.length > 0
+      ? await prisma.teamPulse.findMany({
+          where: { chatId: { in: chatIds }, date: { gte: since } },
+          select: { sentimentScore: true },
+        })
+      : [];
+
+    const avgSentiment = sentimentData.length > 0
+      ? sentimentData.reduce((sum, s) => sum + (s.sentimentScore || 0), 0) / sentimentData.length
+      : null;
+
+    // 构建状态概要
+    let statusSummary = `\n【近一周状态概要】
+- 飞书消息: ${messageCount} 条，活跃于 ${chatIds.length} 个群
+- 情绪趋势: ${avgSentiment !== null ? (avgSentiment > 0.2 ? '积极' : avgSentiment < -0.2 ? '需关注' : '稳定') : '暂无数据'}
+- 活跃信号: ${signals.length} 个待处理`;
+
+    if (signals.length > 0) {
+      statusSummary += '\n  信号详情:';
+      signals.forEach((s, i) => {
+        statusSummary += `\n  ${i + 1}. [${s.signalType}/${s.severity}] ${s.title} (${s.chat.name || s.chatId})`;
+      });
+    }
+
     // 构建洞察摘要
     const insightsByDimension: Record<string, string[]> = {};
     for (const item of assignee.confirmedItems) {
@@ -106,20 +163,24 @@ export async function POST(request: NextRequest) {
     // 构建 prompt
     const prompt = `你是一位经验丰富的管理顾问，帮助COO准备周会。
 
-以下是关于 ${assignee.name} 的洞察信息和当前任务：
+以下是关于 ${assignee.name} 的洞察信息、当前任务和近期活动状态：
+${statusSummary}
 ${insightsSummary}
 ${tasksSummary}
 
-请基于以上信息，生成周会需要讨论的内容，包括：
+请基于以上信息，按以下格式生成周会内容：
 
-1. **本周议题**（3-5个重点讨论事项）
-   - 每个议题简短描述，说明为什么需要讨论
+【状态概要】
+- 基于飞书消息活跃度、情绪趋势和信号数据，概述该成员近一周的整体状态
 
-2. **需要关注的事项**（风险、阻碍、决策点等）
-   - 列出需要特别关注或跟进的事项
+【会议议题】
+1. （3-5个重点讨论事项，每个议题简短描述，说明为什么需要讨论）
 
-3. **建议的行动项**（如果有）
-   - 基于当前情况建议的下一步行动
+【关注事项】
+- 列出风险、阻碍、决策点、未处理信号等需要特别关注或跟进的事项
+
+【建议行动】
+- 基于当前情况建议的下一步行动
 
 请用简洁的中文回答，格式清晰，便于在会议中使用。`;
 
@@ -148,6 +209,10 @@ ${tasksSummary}
         assigneeName: assignee.name,
         insightsCount: assignee.confirmedItems.length,
         tasksCount: assignee.tasks.length,
+        messageCount,
+        activeChatCount: chatIds.length,
+        signalCount: signals.length,
+        avgSentiment,
       },
     });
   } catch (error) {
