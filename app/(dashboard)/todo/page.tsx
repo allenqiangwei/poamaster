@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Box,
   Tabs,
   Tab,
@@ -26,9 +25,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
+  Paper
 } from '@mui/material';
-import { Add as AddIcon, Send as SendIcon } from '@mui/icons-material';
+import { Add as AddIcon, Send as SendIcon, Assessment as ReportIcon } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
 import TaskTable from '@/components/TaskTable';
 
@@ -68,6 +68,8 @@ export default function TodoPage() {
     open: boolean;
     taskId: string | null;
   }>({ open: false, taskId: null });
+  const [reportDialog, setReportDialog] = useState<{ open: boolean; loading: boolean; content: string }>({ open: false, loading: false, content: '' });
+  const [reportSendingToFeishu, setReportSendingToFeishu] = useState(false);
 
   // 加载负责人列表
   useEffect(() => {
@@ -215,6 +217,49 @@ export default function TodoPage() {
     }
   };
 
+  const handleGenerateReport = async (model?: string) => {
+    setReportDialog({ open: true, loading: true, content: '' });
+    try {
+      const res = await fetch('/api/reports/weekly', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReportDialog({ open: true, loading: false, content: data.data.content });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || '生成失败', severity: 'error' });
+      setReportDialog({ open: false, loading: false, content: '' });
+    }
+  };
+
+  const handleSendReportToFeishu = async () => {
+    setReportSendingToFeishu(true);
+    try {
+      const res = await fetch('/api/insights/send-to-feishu', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: reportDialog.content, title: '周报' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSnackbar({ open: true, message: '已发送到飞书', severity: 'success' });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || '发送失败', severity: 'error' });
+    } finally {
+      setReportSendingToFeishu(false);
+    }
+  };
+
   // 客户端过滤和排序
   const filteredTasks = currentTab === 'ALL'
     ? tasks.filter(task => task.status !== 'DONE')
@@ -240,7 +285,7 @@ export default function TodoPage() {
   });
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       <Box
         sx={{
           display: 'flex',
@@ -249,8 +294,15 @@ export default function TodoPage() {
           mb: 3
         }}
       >
-        <Typography variant="h4">📋 To-Do List</Typography>
+        <Typography variant="h4">任务列表</Typography>
         <Stack direction="row" spacing={2}>
+          <Button
+            variant="outlined"
+            startIcon={<ReportIcon />}
+            onClick={() => handleGenerateReport()}
+          >
+            生成周报
+          </Button>
           <Button
             variant="outlined"
             startIcon={sending ? <CircularProgress size={20} /> : <SendIcon />}
@@ -367,6 +419,39 @@ export default function TodoPage() {
         </DialogActions>
       </Dialog>
 
+      <Dialog open={reportDialog.open} onClose={() => setReportDialog({ open: false, loading: false, content: '' })} maxWidth="md" fullWidth>
+        <DialogTitle>周报</DialogTitle>
+        <DialogContent>
+          {reportDialog.loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Paper sx={{ p: 2, mt: 1, whiteSpace: 'pre-wrap', maxHeight: '60vh', overflow: 'auto' }}>
+              <Typography variant="body1">{reportDialog.content}</Typography>
+            </Paper>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleSendReportToFeishu}
+            disabled={!reportDialog.content || reportSendingToFeishu}
+            startIcon={reportSendingToFeishu ? <CircularProgress size={16} /> : <SendIcon />}
+          >
+            发送到飞书
+          </Button>
+          <Button onClick={() => {
+            navigator.clipboard.writeText(reportDialog.content);
+            setSnackbar({ open: true, message: '已复制', severity: 'success' });
+          }} disabled={!reportDialog.content}>
+            复制内容
+          </Button>
+          <Button onClick={() => setReportDialog({ open: false, loading: false, content: '' })}>
+            关闭
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
@@ -379,6 +464,6 @@ export default function TodoPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 }
