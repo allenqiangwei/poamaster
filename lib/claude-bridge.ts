@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { spawn } from 'child_process';
 
 const CLAUDE_PATH = '/opt/homebrew/bin/claude';
 const DEFAULT_MODEL = 'sonnet';
@@ -31,40 +31,67 @@ export async function callClaude(
   );
 
   return new Promise<ClaudeResponse>((resolve, reject) => {
-    execFile(
-      CLAUDE_PATH,
-      args,
-      { timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error('[claude-bridge] execFile error:', error.message);
-          if (stderr) {
-            console.error('[claude-bridge] stderr:', stderr);
-          }
-          reject(new Error(`Claude CLI failed: ${error.message}`));
-          return;
-        }
+    const child = spawn(CLAUDE_PATH, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    });
 
-        try {
-          const parsed = JSON.parse(stdout);
-          resolve({
-            result: parsed.result,
-            sessionId: parsed.session_id,
-            cost: parsed.total_cost_usd,
-            durationMs: parsed.duration_ms,
-          });
-        } catch (parseError) {
-          console.error(
-            '[claude-bridge] Failed to parse stdout:',
-            stdout.slice(0, 500),
-          );
-          reject(
-            new Error(
-              `Failed to parse Claude CLI output: ${(parseError as Error).message}`,
-            ),
-          );
-        }
-      },
-    );
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (stdout.length > MAX_BUFFER) {
+        child.kill('SIGKILL');
+      }
+    });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.kill('SIGKILL');
+        reject(new Error('Claude CLI timed out'));
+      }
+    }, TIMEOUT_MS);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+
+      if (code !== 0) {
+        console.error('[claude-bridge] exit code:', code);
+        if (stderr) console.error('[claude-bridge] stderr:', stderr);
+        reject(new Error(`Claude CLI exited with code ${code}`));
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve({
+          result: parsed.result,
+          sessionId: parsed.session_id,
+          cost: parsed.total_cost_usd,
+          durationMs: parsed.duration_ms,
+        });
+      } catch (parseError) {
+        console.error('[claude-bridge] Failed to parse stdout:', stdout.slice(0, 500));
+        reject(new Error(`Failed to parse Claude CLI output: ${(parseError as Error).message}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      if (!settled) {
+        settled = true;
+        console.error('[claude-bridge] spawn error:', err.message);
+        reject(new Error(`Claude CLI spawn failed: ${err.message}`));
+      }
+    });
   });
 }
