@@ -89,6 +89,7 @@ export async function callClaude(
     '--max-turns', MAX_TURNS,
     '--model', DEFAULT_MODEL,
     '--append-system-prompt', SYSTEM_PROMPT,
+    '--permission-mode', 'bypassPermissions',
   ];
 
   // If resuming a session, try with --resume first
