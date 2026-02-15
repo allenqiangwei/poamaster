@@ -835,10 +835,13 @@ model Decision {
 model BotConversation {
   id           String   @id @default(cuid())
   chatId       String   @unique
+  title        String?
+  source       String   @default("feishu")
   messages     Json     @default("[]")
   lastActiveAt DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([lastActiveAt])
+  @@index([source])
 }
