@@ -121,7 +121,7 @@ export default function ChatBubble() {
           setActiveThread({ chatId: json.data.threadId, title: json.data.title });
         }
       } else {
-        setMessages((prev) => [...prev, { role: 'assistant', content: '抱歉，请求失败，请重试。' }]);
+        setMessages((prev) => [...prev, { role: 'assistant', content: json.error || '抱歉，请求失败，请重试。' }]);
       }
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: '网络错误，请检查连接后重试。' }]);

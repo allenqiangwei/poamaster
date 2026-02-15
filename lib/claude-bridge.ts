@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 const CLAUDE_PATH = '/opt/homebrew/bin/claude';
 const DEFAULT_MODEL = 'sonnet';
 const MAX_TURNS = '5';
-const TIMEOUT_MS = 120000;
+const TIMEOUT_MS = 180000;
 const MAX_BUFFER = 10 * 1024 * 1024;
 
 interface ClaudeResponse {

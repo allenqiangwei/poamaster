@@ -81,7 +81,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Chat API error:', error?.message || error);
-    return NextResponse.json({ success: false, error: 'Failed to process message' }, { status: 500 });
+    const isTimeout = error?.message?.includes('timed out');
+    const msg = isTimeout
+      ? 'Claude 响应超时，请稍后重试或缩短问题'
+      : 'Failed to process message';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
 
