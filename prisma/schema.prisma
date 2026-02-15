@@ -7,56 +7,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 用户
 model User {
   id        String    @id @default(cuid())
   username  String    @unique
-  password  String    // bcrypt 加密
+  password  String
   createdAt DateTime  @default(now())
   sessions  Session[]
 }
 
-// Session 认证
 model Session {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
 }
 
-// 负责人
 model Assignee {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  feishuUserId String?  // 飞书 User ID
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  tasks        Task[]
-
-  // 对话洞察关系
+  id             String          @id @default(cuid())
+  name           String          @unique
+  feishuUserId   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   artifacts      Artifact[]
   confirmedItems ConfirmedItem[]
+  tasks          Task[]
 
   @@index([name])
 }
 
-// 任务
 model Task {
   id         String     @id @default(cuid())
   title      String
-  dod        String?    // Definition of Done
+  dod        String?
   dueDate    DateTime?
   status     TaskStatus @default(TODO)
   assigneeId String?
-  assignee   Assignee?  @relation(fields: [assigneeId], references: [id])
-  decisionId String?
-  decision   Decision?  @relation(fields: [decisionId], references: [id])
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
+  decisionId String?
+  assignee   Assignee?  @relation(fields: [assigneeId], references: [id])
+  decision   Decision?  @relation(fields: [decisionId], references: [id])
 
   @@index([status])
   @@index([dueDate])
@@ -64,16 +58,6 @@ model Task {
   @@index([decisionId])
 }
 
-// 任务状态枚举
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-  CANCELLED
-  POSTPONED
-}
-
-// 配置存储
 model Config {
   id        String   @id @default(cuid())
   key       String   @unique
@@ -81,116 +65,71 @@ model Config {
   updatedAt DateTime @updatedAt
 }
 
-// ========== 对话洞察相关模型 ==========
-
-// Artifact: 一次上传的对话文件
 model Artifact {
-  id           String   @id @default(cuid())
-  assigneeId   String
-
-  // 文件信息
-  fileName     String
-  fileType     String   // txt/docx/pdf
-  filePath     String   // 存储路径
-  charCount    Int
-  pageCount    Int?     // PDF 页数
-
-  // 处理状态
-  status       String   @default("uploading")
-  // uploading/parsing/extracting/deduping/ready/confirmed/failed
-  errorMessage String?
-
-  // LLM 提取信息
-  modelName    String?  // gpt-4o
-  promptVersion String? // 用于追溯不同 prompt 版本
-  latencyMs    Int?     // 处理耗时
-
-  // 时间戳
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // 关系
-  assignee         Assignee @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
-  draftItems       DraftItem[]
-  confirmedItems   ConfirmedItem[]
+  id             String          @id @default(cuid())
+  assigneeId     String
+  fileName       String
+  fileType       String
+  filePath       String
+  charCount      Int
+  pageCount      Int?
+  status         String          @default("uploading")
+  errorMessage   String?
+  modelName      String?
+  promptVersion  String?
+  latencyMs      Int?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  assignee       Assignee        @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
+  confirmedItems ConfirmedItem[]
+  draftItems     DraftItem[]
 
   @@index([assigneeId])
   @@index([status])
   @@index([createdAt])
 }
 
-// DraftItem: 提取后的草稿条目(审核阶段)
 model DraftItem {
   id           String   @id @default(cuid())
   artifactId   String
-
-  // 维度信息
-  dimension    String   // focus/goal/obstacle/decision/risk/action
-  sortOrder    Int      // 同维度内排序
-
-  // 条目内容
-  content      String   @db.Text
-  evidence     String?  @db.Text  // 证据句子(仅 Draft 保留,入库后删除)
-
-  // 拍板维度专属字段
-  decisionType String?  // must_decide/need_intervene(仅 decision 维度)
-
-  // 行动项维度专属字段
-  action       String?  @db.Text  // 行动项描述(仅 action 维度)
-  etaText      String?  // ETA 原文(仅 action 维度)
-
-  // 编辑追踪
+  dimension    String
+  sortOrder    Int
+  content      String
+  evidence     String?
+  decisionType String?
+  action       String?
+  etaText      String?
   isEdited     Boolean  @default(false)
   isDeleted    Boolean  @default(false)
-  movedFrom    String?  // 原始维度(如果被移动)
-
-  // 去重元信息
-  mergedFrom   Json?    // 被合并的条目ID列表 [id1, id2]
-
+  movedFrom    String?
+  mergedFrom   Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  // 关系
   artifact     Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@index([artifactId])
   @@index([dimension])
 }
 
-// ConfirmedItem: 确认入库的条目(长期维护)
 model ConfirmedItem {
   id           String   @id @default(cuid())
   assigneeId   String
-  artifactId   String   // 来源追溯
-
-  // 维度信息
+  artifactId   String
   dimension    String
   sortOrder    Int
-
-  // 条目内容(与 DraftItem 类似,但无 evidence)
-  content      String   @db.Text
+  content      String
   decisionType String?
-  action       String?  @db.Text
+  action       String?
   etaText      String?
-
-  // 状态管理
-  status       String   @default("active") // active/completed/archived
-
-  // 智能分析标记
+  status       String   @default("active")
   smartFlags   Json?
-  // { isDuplicate: bool, isOutdated: bool, relatedIds: [], confidence: float }
-
-  // ToDo 推送信息
   pushedToTodo Boolean  @default(false)
-  todoTaskId   String?  // 关联的 ToDo 任务 ID
-  pushError    String?  // 推送失败原因
-
+  todoTaskId   String?
+  pushError    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  // 关系
-  assignee     Assignee @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
   artifact     Artifact @relation(fields: [artifactId], references: [id])
+  assignee     Assignee @relation(fields: [assigneeId], references: [id], onDelete: Cascade)
 
   @@index([assigneeId])
   @@index([dimension])
@@ -199,32 +138,544 @@ model ConfirmedItem {
   @@index([pushedToTodo])
 }
 
-// ============================================
-// Project Pulse - 项目管理模块
-// ============================================
+model PulseProject {
+  id        String        @id @default(cuid())
+  name      String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  entries   PulseEntry[]
+  reports   PulseReport[]
 
-// 报告类型
+  @@index([updatedAt])
+}
+
+model PulseReport {
+  id          String                 @id @default(cuid())
+  projectId   String
+  fileName    String
+  filePath    String
+  reportType  ReportType
+  reportDate  DateTime
+  parsedText  String?
+  parseStatus ParseStatus            @default(PENDING)
+  parseError  String?
+  uploadedAt  DateTime               @default(now())
+  sessions    PulseAnalysisSession[]
+  project     PulseProject           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model PulseAnalysisSession {
+  id          String        @id @default(cuid())
+  reportId    String
+  aiOutputRaw Json
+  status      SessionStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  report      PulseReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model PulseEntry {
+  id              String         @id @default(cuid())
+  projectId       String
+  dimension       EntryDimension
+  title           String
+  evidenceCurrent String
+  sourceCurrent   Json
+  evidenceHistory Json           @default("[]")
+  embedding       Float[]
+  deletedAt       DateTime?
+  deleteToken     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  project         PulseProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, dimension])
+  @@index([deletedAt])
+}
+
+model RoundtableTemplate {
+  id                 String                 @id @default(cuid())
+  name               String
+  description        String
+  scenario           String?
+  enabled            Boolean                @default(true)
+  usageCount         Int                    @default(0)
+  keywords           Json                   @default("[]")
+  priority           Int                    @default(0)
+  enabledRounds      Json                   @default("[\"clarify\", \"question\", \"rebuttal\", \"verdict\"]")
+  riskChecklist      Json                   @default("[]")
+  outputRequirements Json                   @default("{}")
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  discussions        RoundtableDiscussion[]
+  roles              RoundtableRole[]
+
+  @@index([enabled])
+  @@index([priority])
+}
+
+model RoundtableRole {
+  id             String             @id @default(cuid())
+  templateId     String
+  name           String
+  responsibility String
+  focusAreas     String
+  order          Int
+  createdAt      DateTime           @default(now())
+  template       RoundtableTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([order])
+}
+
+model RoundtableDiscussion {
+  id                    String                 @id @default(cuid())
+  userId                String
+  templateId            String
+  title                 String
+  materialText          String
+  status                String                 @default("processing")
+  errorMessage          String?
+  conclusion            String?
+  conclusionType        String?
+  decisionReasoning     String?
+  processingStartedAt   DateTime?
+  processingCompletedAt DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  model                 String?
+  actions               RoundtableAction[]
+  assumptions           RoundtableAssumption[]
+  attachments           RoundtableAttachment[]
+  template              RoundtableTemplate     @relation(fields: [templateId], references: [id])
+  risks                 RoundtableRisk[]
+  rounds                RoundtableRound[]
+
+  @@index([userId])
+  @@index([templateId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RoundtableRound {
+  id           String               @id @default(cuid())
+  discussionId String
+  roundNumber  Int
+  roundType    String
+  createdAt    DateTime             @default(now())
+  messages     RoundtableMessage[]
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+  @@index([roundNumber])
+}
+
+model RoundtableMessage {
+  id        String          @id @default(cuid())
+  roundId   String
+  roleName  String
+  content   String
+  order     Int
+  createdAt DateTime        @default(now())
+  round     RoundtableRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId])
+  @@index([order])
+}
+
+model RoundtableAction {
+  id                 String               @id @default(cuid())
+  discussionId       String
+  content            String
+  assignee           String?
+  deadline           DateTime?
+  acceptanceCriteria String?
+  priority           String               @default("medium")
+  taskId             String?
+  createdAt          DateTime             @default(now())
+  discussion         RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+  @@index([priority])
+}
+
+model RoundtableRisk {
+  id           String               @id @default(cuid())
+  discussionId String
+  description  String
+  impact       String
+  mitigation   String?
+  priority     String               @default("medium")
+  riskType     String?
+  createdAt    DateTime             @default(now())
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+  @@index([priority])
+}
+
+model RoundtableAttachment {
+  id           String               @id @default(cuid())
+  discussionId String
+  filename     String
+  filepath     String
+  filetype     String
+  filesize     Int
+  createdAt    DateTime             @default(now())
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+}
+
+model RoundtableAssumption {
+  id           String               @id @default(cuid())
+  discussionId String
+  description  String
+  confidence   String
+  reasoning    String
+  createdAt    DateTime             @default(now())
+  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+}
+
+model FeishuChat {
+  id            String          @id @default(cuid())
+  chatId        String          @unique
+  chatType      String
+  name          String?
+  avatar        String?
+  memberCount   Int?
+  lastMessage   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  isBlacklisted Boolean         @default(false)
+  blacklistedAt DateTime?
+  isRenamed     Boolean         @default(false)
+  digests       ChatDigest[]
+  signals       ChatSignal[]
+  messages      FeishuMessage[]
+  pulses        TeamPulse[]
+
+  @@index([chatType])
+  @@index([lastMessage])
+}
+
+model FeishuMessage {
+  id         String     @id @default(cuid())
+  messageId  String     @unique
+  chatId     String
+  senderId   String
+  senderName String
+  content    String
+  msgType    String
+  rawData    String?
+  timestamp  DateTime
+  createdAt  DateTime   @default(now())
+  chat       FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@index([chatId])
+  @@index([timestamp])
+  @@index([senderId])
+}
+
+model ChatSignal {
+  id          String     @id @default(cuid())
+  chatId      String
+  signalType  String
+  severity    String     @default("MEDIUM")
+  title       String
+  summary     String
+  messageIds  String[]
+  relatedUser String?
+  isResolved  Boolean    @default(false)
+  resolvedAt  DateTime?
+  source      String     @default("batch")
+  detectedAt  DateTime   @default(now())
+  createdAt   DateTime   @default(now())
+  chat        FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@index([chatId])
+  @@index([signalType])
+  @@index([detectedAt])
+  @@index([isResolved])
+}
+
+model ChatDigest {
+  id           String     @id @default(cuid())
+  chatId       String
+  date         DateTime   @db.Date
+  summary      String
+  keyTopics    String[]
+  messageCount Int
+  activeUsers  String[]
+  signalCount  Json?
+  createdAt    DateTime   @default(now())
+  chat         FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@unique([chatId, date])
+  @@index([date])
+}
+
+model TeamPulse {
+  id              String     @id @default(cuid())
+  chatId          String
+  date            DateTime   @db.Date
+  messageCount    Int        @default(0)
+  activeUserCount Int        @default(0)
+  sentimentScore  Float?
+  avgResponseTime Float?
+  peakHour        Int?
+  createdAt       DateTime   @default(now())
+  chat            FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@unique([chatId, date])
+  @@index([date])
+}
+
+model InsightTopic {
+  id        String         @id @default(cuid())
+  name      String
+  keywords  String[]       @default([])
+  source    String         @default("auto")
+  weight    Int            @default(50)
+  isPaused  Boolean        @default(false)
+  lastHitAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  cards     InsightCard[]
+  combos    KeywordCombo[]
+}
+
+model KeywordCombo {
+  id         String        @id @default(cuid())
+  topicId    String
+  keywords   String[]
+  score      Int           @default(50)
+  status     String        @default("active")
+  usedCount  Int           @default(0)
+  lastUsedAt DateTime?
+  feedback   Int?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  cards      InsightCard[]
+  topic      InsightTopic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+  @@index([status, score])
+}
+
+model InsightBriefing {
+  id              String           @id @default(cuid())
+  date            DateTime         @unique
+  summary         String
+  status          String           @default("generating")
+  feishuSent      Boolean          @default(false)
+  cardCount       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  cards           InsightCard[]
+  suggestedTopics SuggestedTopic[]
+}
+
+model SuggestedTopic {
+  id         String           @id @default(cuid())
+  briefingId String?
+  name       String
+  reason     String
+  status     String           @default("pending")
+  createdAt  DateTime         @default(now())
+  source     String           @default("briefing")
+  briefing   InsightBriefing? @relation(fields: [briefingId], references: [id])
+
+  @@index([briefingId])
+}
+
+model InsightCard {
+  id          String          @id @default(cuid())
+  briefingId  String
+  topicId     String?
+  category    String
+  priority    String          @default("medium")
+  title       String
+  summary     String
+  details     String
+  impact      String?
+  action      String?
+  sources     Json            @default("[]")
+  relatedData Json            @default("{}")
+  feedback    Int?
+  viewedAt    DateTime?
+  createdAt   DateTime        @default(now())
+  comboId     String?
+  briefing    InsightBriefing @relation(fields: [briefingId], references: [id])
+  combo       KeywordCombo?   @relation(fields: [comboId], references: [id])
+  topic       InsightTopic?   @relation(fields: [topicId], references: [id])
+
+  @@index([briefingId])
+  @@index([topicId])
+  @@index([comboId])
+}
+
+model MonitoredGame {
+  id           String               @id @default(cuid())
+  name         String
+  appStoreId   String?
+  googlePlayId String?
+  xKeywords    String[]             @default([])
+  fbKeywords   String[]             @default([])
+  iconUrl      String?
+  isActive     Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  alerts       SentimentAlert[]
+  dailyStats   SentimentDailyStat[]
+  mentions     SentimentMention[]
+  reviews      SentimentReview[]
+}
+
+model SentimentReview {
+  id             String        @id @default(cuid())
+  gameId         String
+  platform       String
+  externalId     String
+  author         String?
+  rating         Int
+  title          String?
+  content        String
+  language       String?
+  sentimentScore Float?
+  sentimentLabel String?
+  keyIssues      String[]      @default([])
+  publishedAt    DateTime
+  collectedAt    DateTime      @default(now())
+  game           MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, externalId])
+  @@index([gameId, publishedAt])
+  @@index([sentimentLabel])
+}
+
+model SentimentMention {
+  id              String        @id @default(cuid())
+  gameId          String
+  platform        String
+  externalId      String
+  author          String?
+  authorFollowers Int?
+  content         String
+  url             String?
+  sentimentScore  Float?
+  sentimentLabel  String?
+  keyIssues       String[]      @default([])
+  engagement      Json?
+  publishedAt     DateTime
+  collectedAt     DateTime      @default(now())
+  game            MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, externalId])
+  @@index([gameId, publishedAt])
+  @@index([sentimentLabel])
+}
+
+model SentimentAlert {
+  id         String        @id @default(cuid())
+  gameId     String
+  type       String
+  severity   String
+  title      String
+  summary    String
+  dataPoints Json?
+  isRead     Boolean       @default(false)
+  notifiedAt DateTime?
+  createdAt  DateTime      @default(now())
+  game       MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, createdAt])
+  @@index([isRead])
+}
+
+model SentimentDailyStat {
+  id            String        @id @default(cuid())
+  gameId        String
+  date          DateTime      @db.Date
+  reviewCount   Int           @default(0)
+  mentionCount  Int           @default(0)
+  avgSentiment  Float?
+  avgRating     Float?
+  negativeCount Int           @default(0)
+  positiveCount Int           @default(0)
+  topIssues     Json?
+  summary       String?
+  generatedAt   DateTime      @default(now())
+  game          MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, date])
+}
+
+model Decision {
+  id         String         @id @default(cuid())
+  title      String
+  context    String?
+  outcome    String?
+  status     DecisionStatus @default(PENDING)
+  madeAt     DateTime
+  madeBy     String?
+  reviewDate DateTime?
+  notes      String?
+  signalId   String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  tasks      Task[]
+
+  @@index([status])
+  @@index([madeAt])
+  @@index([reviewDate])
+}
+
+model BotConversation {
+  id           String   @id @default(cuid())
+  chatId       String   @unique
+  messages     Json     @default("[]")
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  title        String?
+  source           String   @default("feishu")
+  claudeSessionId  String?
+
+  @@index([lastActiveAt])
+  @@index([source])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+  POSTPONED
+}
+
 enum ReportType {
   DAILY
   WEEKLY
   OTHER
 }
 
-// 解析状态
 enum ParseStatus {
   PENDING
   SUCCESS
   FAILED
 }
 
-// 分析会话状态
 enum SessionStatus {
   PENDING
   COMPLETED
   FAILED
 }
 
-// 12 维度枚举
 enum EntryDimension {
   OVERALL_HEALTH
   SCHEDULE
@@ -240,608 +691,9 @@ enum EntryDimension {
   ALIGNMENT
 }
 
-// 项目
-model PulseProject {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  reports   PulseReport[]
-  entries   PulseEntry[]
-
-  @@index([updatedAt])
-}
-
-// 上传的报告
-model PulseReport {
-  id          String      @id @default(cuid())
-  projectId   String
-  project     PulseProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  fileName    String
-  filePath    String
-  reportType  ReportType
-  reportDate  DateTime
-  parsedText  String?     @db.Text
-  parseStatus ParseStatus @default(PENDING)
-  parseError  String?
-
-  uploadedAt  DateTime    @default(now())
-  sessions    PulseAnalysisSession[]
-
-  @@index([projectId])
-}
-
-// 分析会话
-model PulseAnalysisSession {
-  id          String        @id @default(cuid())
-  reportId    String
-  report      PulseReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-
-  aiOutputRaw Json
-  status      SessionStatus @default(PENDING)
-  createdAt   DateTime      @default(now())
-
-  @@index([reportId])
-}
-
-// 条目
-model PulseEntry {
-  id              String         @id @default(cuid())
-  projectId       String
-  project         PulseProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  dimension       EntryDimension
-  title           String
-  evidenceCurrent String         @db.Text
-  sourceCurrent   Json
-  evidenceHistory Json           @default("[]")
-  embedding       Float[]
-
-  deletedAt       DateTime?
-  deleteToken     String?
-
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  @@index([projectId, dimension])
-  @@index([deletedAt])
-}
-
-// ============================================
-// Roundtable Discussion - 圆桌会议模块
-// ============================================
-
-// 讨论模板
-model RoundtableTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  description String   @db.Text
-  scenario    String?  @db.Text
-  enabled     Boolean  @default(true)
-  usageCount  Int      @default(0)
-
-  // 自动路由配置
-  keywords    Json     @default("[]") // ["立项", "新项目"]
-  priority    Int      @default(0)    // 匹配优先级
-
-  // 讨论流程配置
-  enabledRounds Json   @default("[\"clarify\",\"question\",\"rebuttal\",\"verdict\"]")
-
-  // 风险检查清单
-  riskChecklist Json   @default("[]")
-
-  // 输出要求
-  outputRequirements Json @default("{}")
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  roles       RoundtableRole[]
-  discussions RoundtableDiscussion[]
-
-  @@index([enabled])
-  @@index([priority])
-}
-
-// 角色定义
-model RoundtableRole {
-  id             String   @id @default(cuid())
-  templateId     String
-  name           String   // "财务官"
-  responsibility String   @db.Text // "评估财务可行性和ROI"
-  focusAreas     String   @db.Text // "成本、收入、现金流"
-  order          Int      // 显示顺序
-  createdAt      DateTime @default(now())
-
-  template       RoundtableTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  @@index([templateId])
-  @@index([order])
-}
-
-// 讨论记录
-model RoundtableDiscussion {
-  id           String   @id @default(cuid())
-  userId       String   // 创建者
-  templateId   String
-
-  // 基本信息
-  title        String
-  materialText String   @db.Text
-  model        String?  // AI 模型选择 (如 gpt-4o, claude-sonnet-4)
-
-  // 处理状态
-  status       String   @default("processing") // processing/completed/failed
-  errorMessage String?  @db.Text
-
-  // 结果
-  conclusion   String?  @db.Text
-  conclusionType String? // pass/conditional_pass/reject/need_more_info
-  decisionReasoning String? @db.Text
-
-  // 元信息
-  processingStartedAt DateTime?
-  processingCompletedAt DateTime?
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  template     RoundtableTemplate @relation(fields: [templateId], references: [id])
-  rounds       RoundtableRound[]
-  actions      RoundtableAction[]
-  risks        RoundtableRisk[]
-  attachments  RoundtableAttachment[]
-  assumptions  RoundtableAssumption[]
-
-  @@index([userId])
-  @@index([templateId])
-  @@index([status])
-  @@index([createdAt])
-}
-
-// 讨论回合
-model RoundtableRound {
-  id           String   @id @default(cuid())
-  discussionId String
-  roundNumber  Int      // 1, 2, 3, 4
-  roundType    String   // clarify/question/rebuttal/verdict
-  createdAt    DateTime @default(now())
-
-  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
-  messages     RoundtableMessage[]
-
-  @@index([discussionId])
-  @@index([roundNumber])
-}
-
-// 角色发言
-model RoundtableMessage {
-  id        String   @id @default(cuid())
-  roundId   String
-  roleName  String   // "财务官"
-  content   String   @db.Text
-  order     Int      // 发言顺序
-  createdAt DateTime @default(now())
-
-  round     RoundtableRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
-
-  @@index([roundId])
-  @@index([order])
-}
-
-// 行动清单
-model RoundtableAction {
-  id                 String    @id @default(cuid())
-  discussionId       String
-  content            String    @db.Text
-  assignee           String?   // 建议负责人
-  deadline           DateTime? // 建议截止时间
-  acceptanceCriteria String?   @db.Text
-  priority           String    @default("medium") // high/medium/low
-
-  // 任务关联
-  taskId             String?   // 关联的Task ID
-
-  createdAt          DateTime  @default(now())
-
-  discussion         RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
-
-  @@index([discussionId])
-  @@index([priority])
-}
-
-// 风险清单
-model RoundtableRisk {
-  id           String   @id @default(cuid())
-  discussionId String
-  description  String   @db.Text
-  impact       String   @db.Text
-  mitigation   String?  @db.Text
-  priority     String   @default("medium") // high/medium/low
-  riskType     String?  // market/financial/operational/legal/technical/strategic
-  createdAt    DateTime @default(now())
-
-  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
-
-  @@index([discussionId])
-  @@index([priority])
-}
-
-// 文件附件
-model RoundtableAttachment {
-  id           String   @id @default(cuid())
-  discussionId String
-  filename     String
-  filepath     String
-  filetype     String   // pdf/png/jpg/jpeg
-  filesize     Int      // bytes
-  createdAt    DateTime @default(now())
-
-  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
-
-  @@index([discussionId])
-}
-
-// 假设说明
-model RoundtableAssumption {
-  id           String   @id @default(cuid())
-  discussionId String
-  description  String   @db.Text
-  confidence   String   // high/medium/low
-  reasoning    String   @db.Text
-  createdAt    DateTime @default(now())
-
-  discussion   RoundtableDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
-
-  @@index([discussionId])
-}
-
-// ============================================
-// 飞书集成 - 消息采集模块
-// ============================================
-
-// 飞书对话
-model FeishuChat {
-  id            String    @id @default(cuid())
-  chatId        String    @unique        // 飞书原始 chat_id
-  chatType      String                   // "group" / "private"
-  name          String?                  // 群名或对方昵称
-  avatar        String?                  // 头像 URL
-  memberCount   Int?                     // 群成员数
-  lastMessage   DateTime?                // 最后消息时间
-  isRenamed     Boolean   @default(false)   // 用户手动重命名，阻止自动覆盖
-  isBlacklisted Boolean   @default(false)
-  blacklistedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  messages      FeishuMessage[]
-  signals       ChatSignal[]
-  digests       ChatDigest[]
-  pulses        TeamPulse[]
-
-  @@index([chatType])
-  @@index([lastMessage])
-}
-
-// 飞书消息
-model FeishuMessage {
-  id         String   @id @default(cuid())
-  messageId  String   @unique         // 飞书原始 message_id
-  chatId     String                   // 关联 FeishuChat.chatId
-  senderId   String                   // 发送者 open_id
-  senderName String                   // 发送者昵称
-  content    String   @db.Text        // 消息文本内容
-  msgType    String                   // text/image/file/...
-  rawData    String?  @db.Text        // 原始 JSON
-  timestamp  DateTime                 // 消息时间
-  createdAt  DateTime @default(now())
-
-  chat       FeishuChat @relation(fields: [chatId], references: [chatId])
-
-  @@index([chatId])
-  @@index([timestamp])
-  @@index([senderId])
-}
-
-// ==================== Team Pulse (运营智能) ====================
-
-// 运营信号 — 从飞书消息中提取的结构化信号
-model ChatSignal {
-  id          String    @id @default(cuid())
-  chatId      String
-  signalType  String                      // RISK / BLOCKER / ESCALATION / DECISION / ACTION / SENTIMENT
-  severity    String    @default("MEDIUM") // LOW / MEDIUM / HIGH / CRITICAL
-  title       String
-  summary     String    @db.Text
-  messageIds  String[]                    // 关联的 FeishuMessage.messageId
-  relatedUser String?                     // 相关责任人名称
-  isResolved  Boolean   @default(false)
-  resolvedAt  DateTime?
-  source      String    @default("batch") // realtime / batch
-  detectedAt  DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-
-  chat        FeishuChat @relation(fields: [chatId], references: [chatId])
-
-  @@index([chatId])
-  @@index([signalType])
-  @@index([detectedAt])
-  @@index([isResolved])
-}
-
-// 群聊每日摘要 — LLM 生成的每日群聊总结
-model ChatDigest {
-  id           String   @id @default(cuid())
-  chatId       String
-  date         DateTime @db.Date
-  summary      String   @db.Text
-  keyTopics    String[]
-  messageCount Int
-  activeUsers  String[]
-  signalCount  Json?                      // { RISK: 1, ACTION: 2, ... }
-  createdAt    DateTime @default(now())
-
-  chat         FeishuChat @relation(fields: [chatId], references: [chatId])
-
-  @@unique([chatId, date])
-  @@index([date])
-}
-
-// 团队脉搏 — 按天聚合的群聊活跃度/情绪
-model TeamPulse {
-  id              String   @id @default(cuid())
-  chatId          String
-  date            DateTime @db.Date
-  messageCount    Int      @default(0)
-  activeUserCount Int      @default(0)
-  sentimentScore  Float?                  // -1.0 to 1.0
-  avgResponseTime Float?                  // 平均回复间隔（分钟）
-  peakHour        Int?                    // 消息最多的小时 (0-23)
-  createdAt       DateTime @default(now())
-
-  chat            FeishuChat @relation(fields: [chatId], references: [chatId])
-
-  @@unique([chatId, date])
-  @@index([date])
-}
-
-// ==================== Insight Briefing System ====================
-
-model InsightTopic {
-  id        String   @id @default(cuid())
-  name      String                       // 话题名称
-  keywords  String[] @default([])        // 搜索关键词
-  source    String   @default("auto")    // auto | manual
-  weight    Int      @default(50)        // 权重 0-100
-  isPaused  Boolean  @default(false)
-  lastHitAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  cards     InsightCard[]
-  combos    KeywordCombo[]
-}
-
-model KeywordCombo {
-  id         String    @id @default(cuid())
-  topicId    String
-  keywords   String[]
-  score      Int       @default(50)
-  status     String    @default("active") // active | retired | new
-  usedCount  Int       @default(0)
-  lastUsedAt DateTime?
-  feedback   Int?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  topic InsightTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  cards InsightCard[]
-
-  @@index([topicId])
-  @@index([status, score])
-}
-
-model InsightBriefing {
-  id         String   @id @default(cuid())
-  date       DateTime @unique            // 简报日期（一天一份）
-  summary    String   @db.Text           // 今日要闻概要
-  status     String   @default("generating") // generating | ready | sent
-  feishuSent Boolean  @default(false)
-  cardCount  Int      @default(0)
-  createdAt       DateTime @default(now())
-  cards           InsightCard[]
-  suggestedTopics SuggestedTopic[]
-}
-
-model SuggestedTopic {
-  id         String   @id @default(cuid())
-  briefingId String?
-  name       String                          // 推荐话题名称
-  reason     String   @db.Text               // 推荐理由
-  status     String   @default("pending")    // pending | accepted | dismissed
-  source     String   @default("briefing")   // briefing | daily
-  createdAt  DateTime @default(now())
-
-  briefing InsightBriefing? @relation(fields: [briefingId], references: [id])
-
-  @@index([briefingId])
-}
-
-model InsightCard {
-  id          String   @id @default(cuid())
-  briefingId  String
-  topicId     String?
-  comboId     String?
-  category    String                     // risk | industry | competitor | internal | tech | opportunity
-  priority    String   @default("medium") // high | medium | low
-  title       String
-  summary     String   @db.Text
-  details     String   @db.Text          // 完整 Markdown
-  impact      String?  @db.Text
-  action      String?  @db.Text
-  sources     Json     @default("[]")    // [{title, url}]
-  relatedData Json     @default("{}")    // 关联的内部数据
-  feedback    Int?                       // 1=👍, -1=👎, null=未反馈
-  viewedAt    DateTime?
-  createdAt   DateTime @default(now())
-
-  briefing InsightBriefing @relation(fields: [briefingId], references: [id])
-  topic    InsightTopic?   @relation(fields: [topicId], references: [id])
-  combo    KeywordCombo?   @relation(fields: [comboId], references: [id])
-
-  @@index([briefingId])
-  @@index([topicId])
-  @@index([comboId])
-}
-
-// ============================================
-// Sentiment Monitoring — 舆情监控模块
-// ============================================
-
-model MonitoredGame {
-  id            String   @id @default(cuid())
-  name          String
-  appStoreId    String?
-  googlePlayId  String?
-  xKeywords     String[] @default([])
-  fbKeywords    String[] @default([])
-  iconUrl       String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  reviews       SentimentReview[]
-  mentions      SentimentMention[]
-  alerts        SentimentAlert[]
-  dailyStats    SentimentDailyStat[]
-}
-
-model SentimentReview {
-  id              String   @id @default(cuid())
-  gameId          String
-  platform        String
-  externalId      String
-  author          String?
-  rating          Int
-  title           String?
-  content         String   @db.Text
-  language        String?
-  sentimentScore  Float?
-  sentimentLabel  String?
-  keyIssues       String[] @default([])
-  publishedAt     DateTime
-  collectedAt     DateTime @default(now())
-
-  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
-
-  @@unique([platform, externalId])
-  @@index([gameId, publishedAt])
-  @@index([sentimentLabel])
-}
-
-model SentimentMention {
-  id              String   @id @default(cuid())
-  gameId          String
-  platform        String
-  externalId      String
-  author          String?
-  authorFollowers Int?
-  content         String   @db.Text
-  url             String?
-  sentimentScore  Float?
-  sentimentLabel  String?
-  keyIssues       String[] @default([])
-  engagement      Json?
-  publishedAt     DateTime
-  collectedAt     DateTime @default(now())
-
-  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
-
-  @@unique([platform, externalId])
-  @@index([gameId, publishedAt])
-  @@index([sentimentLabel])
-}
-
-model SentimentAlert {
-  id          String    @id @default(cuid())
-  gameId      String
-  type        String
-  severity    String
-  title       String
-  summary     String    @db.Text
-  dataPoints  Json?
-  isRead      Boolean   @default(false)
-  notifiedAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
-
-  @@index([gameId, createdAt])
-  @@index([isRead])
-}
-
-model SentimentDailyStat {
-  id              String   @id @default(cuid())
-  gameId          String
-  date            DateTime @db.Date
-  reviewCount     Int      @default(0)
-  mentionCount    Int      @default(0)
-  avgSentiment    Float?
-  avgRating       Float?
-  negativeCount   Int      @default(0)
-  positiveCount   Int      @default(0)
-  topIssues       Json?
-  summary         String?  @db.Text
-  generatedAt     DateTime @default(now())
-
-  game MonitoredGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
-
-  @@unique([gameId, date])
-}
-
-// ==================== Decision Log (决策日志) ====================
-
 enum DecisionStatus {
   PENDING
   EXECUTING
   COMPLETED
   REVISED
-}
-
-model Decision {
-  id          String         @id @default(cuid())
-  title       String
-  context     String?        @db.Text
-  outcome     String?        @db.Text
-  status      DecisionStatus @default(PENDING)
-  madeAt      DateTime
-  madeBy      String?
-  reviewDate  DateTime?
-  notes       String?        @db.Text
-  signalId    String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-
-  tasks       Task[]
-
-  @@index([status])
-  @@index([madeAt])
-  @@index([reviewDate])
-}
-
-// ==================== Feishu Bot (自然语言助手) ====================
-
-model BotConversation {
-  id           String   @id @default(cuid())
-  chatId       String   @unique
-  title        String?
-  source       String   @default("feishu")
-  messages     Json     @default("[]")
-  lastActiveAt DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([lastActiveAt])
-  @@index([source])
 }
