@@ -514,6 +514,9 @@ model FeishuChat {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   messages      FeishuMessage[]
+  signals       ChatSignal[]
+  digests       ChatDigest[]
+  pulses        TeamPulse[]
 
   @@index([chatType])
   @@index([lastMessage])
@@ -537,6 +540,68 @@ model FeishuMessage {
   @@index([chatId])
   @@index([timestamp])
   @@index([senderId])
+}
+
+// ==================== Team Pulse (运营智能) ====================
+
+// 运营信号 — 从飞书消息中提取的结构化信号
+model ChatSignal {
+  id          String    @id @default(cuid())
+  chatId      String
+  signalType  String                      // RISK / BLOCKER / ESCALATION / DECISION / ACTION / SENTIMENT
+  severity    String    @default("MEDIUM") // LOW / MEDIUM / HIGH / CRITICAL
+  title       String
+  summary     String    @db.Text
+  messageIds  String[]                    // 关联的 FeishuMessage.messageId
+  relatedUser String?                     // 相关责任人名称
+  isResolved  Boolean   @default(false)
+  resolvedAt  DateTime?
+  source      String    @default("batch") // realtime / batch
+  detectedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  chat        FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@index([chatId])
+  @@index([signalType])
+  @@index([detectedAt])
+  @@index([isResolved])
+}
+
+// 群聊每日摘要 — LLM 生成的每日群聊总结
+model ChatDigest {
+  id           String   @id @default(cuid())
+  chatId       String
+  date         DateTime @db.Date
+  summary      String   @db.Text
+  keyTopics    String[]
+  messageCount Int
+  activeUsers  String[]
+  signalCount  Json?                      // { RISK: 1, ACTION: 2, ... }
+  createdAt    DateTime @default(now())
+
+  chat         FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@unique([chatId, date])
+  @@index([date])
+}
+
+// 团队脉搏 — 按天聚合的群聊活跃度/情绪
+model TeamPulse {
+  id              String   @id @default(cuid())
+  chatId          String
+  date            DateTime @db.Date
+  messageCount    Int      @default(0)
+  activeUserCount Int      @default(0)
+  sentimentScore  Float?                  // -1.0 to 1.0
+  avgResponseTime Float?                  // 平均回复间隔（分钟）
+  peakHour        Int?                    // 消息最多的小时 (0-23)
+  createdAt       DateTime @default(now())
+
+  chat            FeishuChat @relation(fields: [chatId], references: [chatId])
+
+  @@unique([chatId, date])
+  @@index([date])
 }
 
 // ==================== Insight Briefing System ====================
