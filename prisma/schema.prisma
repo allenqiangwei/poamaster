@@ -636,18 +636,38 @@ model Decision {
 }
 
 model BotConversation {
-  id           String   @id @default(cuid())
-  chatId       String   @unique
-  messages     Json     @default("[]")
-  lastActiveAt DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  title        String?
-  source           String   @default("feishu")
-  claudeSessionId  String?
+  id              String       @id @default(cuid())
+  chatId          String       @unique
+  messages        Json         @default("[]")
+  lastActiveAt    DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  title           String?
+  source          String       @default("feishu")
+  claudeSessionId String?
+  hasUnread       Boolean      @default(false)
+  botMessages     BotMessage[]
 
   @@index([lastActiveAt])
   @@index([source])
+}
+
+model BotMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  role           String          // 'user' | 'assistant'
+  content        String?         // null while processing, filled on completion
+  status         String          @default("pending") // pending | processing | done | error
+  progress       String?         // current progress description
+  errorMessage   String?         // error details when status = error
+  unread         Boolean         @default(false) // true for new assistant replies
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  conversation   BotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([status])
+  @@index([updatedAt])
 }
 
 enum TaskStatus {
