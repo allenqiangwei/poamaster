@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, Button,
   CircularProgress, Alert, IconButton, ToggleButtonGroup, ToggleButton,
-  Divider, Stack, Tooltip,
+  Divider, Stack, Tooltip, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField, FormControl, InputLabel, Select, MenuItem,
+  Snackbar,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -16,6 +18,8 @@ import {
   Assignment as ActionIcon,
   Mood as SentimentIcon,
   TrendingUp as TrendIcon,
+  AddTask as AddTaskIcon,
+  Gavel as GavelIcon,
 } from '@mui/icons-material';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, Legend,
@@ -90,6 +94,19 @@ export default function TeamPulsePage() {
   const [showResolved, setShowResolved] = useState(false);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
 
+  // Task creation dialog
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskForm, setTaskForm] = useState({ title: '', dod: '', assigneeId: '' });
+  const [taskCreating, setTaskCreating] = useState(false);
+  const [assignees, setAssignees] = useState<Array<{ id: string; name: string }>>([]);
+  const [snackMsg, setSnackMsg] = useState('');
+
+  // Decision creation dialog
+  const [decisionDialogOpen, setDecisionDialogOpen] = useState(false);
+  const [decisionForm, setDecisionForm] = useState({ title: '', context: '', madeBy: '', reviewDate: '' });
+  const [decisionSignalId, setDecisionSignalId] = useState<string | null>(null);
+  const [decisionCreating, setDecisionCreating] = useState(false);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -143,6 +160,80 @@ export default function TeamPulsePage() {
       setError('分析失败');
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const openTaskDialog = async (signal: Signal) => {
+    setTaskForm({
+      title: signal.title,
+      dod: `[${signal.signalType}] ${signal.summary}\n来源: ${signal.chat.name || '未命名群聊'}`,
+      assigneeId: '',
+    });
+    setTaskDialogOpen(true);
+    if (assignees.length === 0) {
+      try {
+        const res = await fetch('/api/assignees', { credentials: 'include' });
+        const data = await res.json();
+        if (data.success) setAssignees(data.data || []);
+      } catch { /* ignore */ }
+    }
+  };
+
+  const handleCreateTask = async () => {
+    if (!taskForm.title.trim()) return;
+    setTaskCreating(true);
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskForm.title.trim(),
+          dod: taskForm.dod.trim() || undefined,
+          assigneeId: taskForm.assigneeId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSnackMsg('任务已创建');
+        setTaskDialogOpen(false);
+      } else {
+        setSnackMsg(data.error || '创建失败');
+      }
+    } catch {
+      setSnackMsg('创建失败');
+    } finally {
+      setTaskCreating(false);
+    }
+  };
+
+  const handleCreateDecision = async () => {
+    setDecisionCreating(true);
+    try {
+      const res = await fetch('/api/decisions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: decisionForm.title,
+          context: decisionForm.context || null,
+          madeBy: decisionForm.madeBy || null,
+          madeAt: new Date().toISOString(),
+          reviewDate: decisionForm.reviewDate || null,
+          signalId: decisionSignalId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDecisionDialogOpen(false);
+        setSnackMsg('决策已创建');
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      setSnackMsg(err.message || '创建失败');
+    } finally {
+      setDecisionCreating(false);
     }
   };
 
@@ -282,6 +373,29 @@ export default function TeamPulsePage() {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                           {SIGNAL_ICONS[sig.signalType]}
                           <Typography variant="subtitle2" sx={{ flex: 1 }}>{sig.title}</Typography>
+                          <Tooltip title="创建任务">
+                            <IconButton size="small" onClick={() => openTaskDialog(sig)}>
+                              <AddTaskIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="记录为决策">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDecisionForm({
+                                  title: sig.title || '',
+                                  context: sig.summary || '',
+                                  madeBy: sig.relatedUser || '',
+                                  reviewDate: '',
+                                });
+                                setDecisionSignalId(sig.id);
+                                setDecisionDialogOpen(true);
+                              }}
+                            >
+                              <GavelIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                           {!sig.isResolved && (
                             <Tooltip title="标记已处理">
                               <IconButton size="small" onClick={() => handleResolve(sig.id)}>
@@ -424,6 +538,105 @@ export default function TeamPulsePage() {
           )}
         </Grid>
       </Grid>
+
+      {/* Task Creation Dialog */}
+      <Dialog open={taskDialogOpen} onClose={() => setTaskDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>从信号创建任务</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+          <TextField
+            label="任务标题"
+            fullWidth
+            value={taskForm.title}
+            onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+          />
+          <TextField
+            label="完成定义 (DoD)"
+            fullWidth
+            multiline
+            rows={3}
+            value={taskForm.dod}
+            onChange={e => setTaskForm(f => ({ ...f, dod: e.target.value }))}
+          />
+          <FormControl fullWidth>
+            <InputLabel>负责人</InputLabel>
+            <Select
+              value={taskForm.assigneeId}
+              label="负责人"
+              onChange={e => setTaskForm(f => ({ ...f, assigneeId: e.target.value as string }))}
+            >
+              <MenuItem value="">未指定</MenuItem>
+              {assignees.map(a => (
+                <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTaskDialogOpen(false)}>取消</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateTask}
+            disabled={taskCreating || !taskForm.title.trim()}
+          >
+            {taskCreating ? '创建中...' : '确认创建'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Decision Creation Dialog */}
+      <Dialog open={decisionDialogOpen} onClose={() => setDecisionDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>记录为决策</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="决策标题"
+              value={decisionForm.title}
+              onChange={e => setDecisionForm(f => ({ ...f, title: e.target.value }))}
+              required
+              fullWidth
+            />
+            <TextField
+              label="决策背景"
+              value={decisionForm.context}
+              onChange={e => setDecisionForm(f => ({ ...f, context: e.target.value }))}
+              multiline
+              rows={3}
+              fullWidth
+            />
+            <TextField
+              label="决策人"
+              value={decisionForm.madeBy}
+              onChange={e => setDecisionForm(f => ({ ...f, madeBy: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              label="复盘日期"
+              type="date"
+              value={decisionForm.reviewDate}
+              onChange={e => setDecisionForm(f => ({ ...f, reviewDate: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDecisionDialogOpen(false)}>取消</Button>
+          <Button
+            variant="contained"
+            disabled={!decisionForm.title.trim() || decisionCreating}
+            onClick={handleCreateDecision}
+          >
+            {decisionCreating ? '创建中...' : '创建决策'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!snackMsg}
+        autoHideDuration={3000}
+        onClose={() => setSnackMsg('')}
+        message={snackMsg}
+      />
     </Box>
   );
 }
