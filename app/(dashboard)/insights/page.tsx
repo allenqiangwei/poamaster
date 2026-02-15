@@ -39,6 +39,10 @@ import {
   Lightbulb as LightbulbIcon,
   AddCircleOutline as AddCircleIcon,
   Close as CloseIcon,
+  MonitorHeart as SentimentIcon,
+  NotificationImportant as NotificationImportantIcon,
+  Gavel as GavelIcon,
+  PriorityHigh as PriorityHighIcon,
 } from '@mui/icons-material';
 
 interface DailyData {
@@ -63,6 +67,19 @@ interface DailyData {
     newActions: number;
     newRisks: number;
   };
+  sentiment?: {
+    totalReviews: number;
+    positive: number;
+    neutral: number;
+    negative: number;
+    topIssues: Array<{ tag: string; count: number }>;
+    games: Array<{ name: string; reviewCount: number; avgRating: number | null }>;
+  };
+  priorities?: {
+    overdueTasks: Array<{ id: string; title: string; assignee: string; dueDate: string }>;
+    unresolvedSignals: Array<{ id: string; type: string; severity: string; title: string; chatName: string }>;
+    pendingDecisions: Array<{ id: string; title: string; madeBy: string; madeAt: string }>;
+  };
 }
 
 interface SuggestedTopic {
@@ -71,6 +88,14 @@ interface SuggestedTopic {
   reason: string;
   status: string;
 }
+
+type PriorityItem = {
+  id: string;
+  type: 'task' | 'signal' | 'decision';
+  title: string;
+  detail: string;
+  href: string;
+};
 
 import { designTokens as dt } from '@/lib/theme';
 
@@ -340,6 +365,7 @@ export default function InsightsPage() {
   const [error, setError] = useState('');
   const [generatedAt, setGeneratedAt] = useState('');
   const [suggestedTopics, setSuggestedTopics] = useState<SuggestedTopic[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
   const [snackbar, setSnackbar] = useState('');
 
   const loadInsights = useCallback(async (forceRefresh = false) => {
@@ -393,6 +419,28 @@ export default function InsightsPage() {
       }
     } catch {
       // Silently fail
+    }
+  };
+
+  const handleGenerateSuggestions = async () => {
+    setSuggesting(true);
+    try {
+      const res = await fetch('/api/insights/topics/suggest', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const result = await res.json();
+      if (result.success && result.suggestions?.length > 0) {
+        setSuggestedTopics(result.suggestions);
+      } else if (result.suggestions?.length === 0) {
+        setSnackbar('暂无新话题建议');
+      } else {
+        setSnackbar(result.error || '生成失败');
+      }
+    } catch {
+      setSnackbar('网络错误');
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -635,73 +683,263 @@ export default function InsightsPage() {
               </Grid>
             </Grid>
 
-            {/* Suggested Topics */}
-            {suggestedTopics.length > 0 && (
-              <Fade in timeout={800}>
-                <Card sx={{ ...CARD_STYLE, mb: 3, '&:hover': { ...CARD_STYLE['&:hover'], transform: 'none' } }} elevation={0}>
-                  <CardContent sx={{ p: 2.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                      <LightbulbIcon sx={{ color: COLORS.warning, fontSize: 18 }} />
-                      <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
-                        AI 发现了这些值得关注的新话题
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                      {suggestedTopics.map((s) => (
-                        <Box
-                          key={s.id}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 2,
-                            p: 1.5,
-                            borderRadius: '12px',
-                            bgcolor: dt.bg.deep,
-                            border: `1px solid ${dt.border.default}`,
-                          }}
-                        >
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 600 }}>
-                              {s.name}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: COLORS.textSecondary, fontSize: '0.82rem' }}>
-                              {s.reason}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                            <Tooltip title="采纳话题" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleSuggestion(s.id, 'accept')}
+            {/* Priority Queue */}
+            {(() => {
+              const priorityItems: PriorityItem[] = [
+                ...(data?.priorities?.overdueTasks || []).map(t => ({
+                  id: t.id,
+                  type: 'task' as const,
+                  title: t.title,
+                  detail: `${t.assignee} · 逾期 ${t.dueDate ? new Date(t.dueDate).toLocaleDateString('zh-CN') : ''}`,
+                  href: `/todo/${t.id}`,
+                })),
+                ...(data?.priorities?.unresolvedSignals || []).map(s => ({
+                  id: s.id,
+                  type: 'signal' as const,
+                  title: s.title,
+                  detail: `${s.severity} · ${s.chatName}`,
+                  href: '/feishu/pulse',
+                })),
+                ...(data?.priorities?.pendingDecisions || []).map(d => ({
+                  id: d.id,
+                  type: 'decision' as const,
+                  title: d.title,
+                  detail: `${d.madeBy} · ${new Date(d.madeAt).toLocaleDateString('zh-CN')}`,
+                  href: `/decisions/${d.id}`,
+                })),
+              ];
+
+              const priorityConfig = {
+                task: {
+                  icon: <WarningIcon sx={{ fontSize: 18 }} />,
+                  label: '任务',
+                  chipColor: COLORS.warning,
+                  chipBg: `${COLORS.warning}18`,
+                },
+                signal: {
+                  icon: <NotificationImportantIcon sx={{ fontSize: 18 }} />,
+                  label: '信号',
+                  chipColor: COLORS.danger,
+                  chipBg: `${COLORS.danger}18`,
+                },
+                decision: {
+                  icon: <GavelIcon sx={{ fontSize: 18 }} />,
+                  label: '决策',
+                  chipColor: COLORS.accent,
+                  chipBg: `${COLORS.accent}18`,
+                },
+              };
+
+              return (
+                <Fade in timeout={700}>
+                  <Card
+                    sx={{
+                      ...CARD_STYLE,
+                      mb: 3,
+                      borderLeft: `3px solid ${COLORS.warning}`,
+                      '&:hover': { ...CARD_STYLE['&:hover'], transform: 'none' },
+                    }}
+                    elevation={0}
+                  >
+                    <CardContent sx={{ p: 2.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: priorityItems.length > 0 ? 2 : 0 }}>
+                        <PriorityHighIcon sx={{ color: COLORS.warning, fontSize: 20 }} />
+                        <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
+                          今日优先事项
+                        </Typography>
+                        {priorityItems.length > 0 && (
+                          <Chip
+                            label={priorityItems.length}
+                            size="small"
+                            sx={{
+                              ml: 'auto',
+                              bgcolor: `${COLORS.warning}18`,
+                              color: COLORS.warning,
+                              fontWeight: 700,
+                              fontSize: '0.7rem',
+                              height: 22,
+                              minWidth: 22,
+                            }}
+                          />
+                        )}
+                      </Box>
+
+                      {priorityItems.length === 0 ? (
+                        <Typography variant="body2" sx={{ color: COLORS.textMuted, textAlign: 'center', py: 1 }}>
+                          暂无优先事项
+                        </Typography>
+                      ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {priorityItems.map((item) => {
+                            const config = priorityConfig[item.type];
+                            return (
+                              <Box
+                                key={`${item.type}-${item.id}`}
+                                onClick={() => router.push(item.href)}
                                 sx={{
-                                  color: COLORS.success,
-                                  border: `1px solid ${COLORS.success}30`,
-                                  '&:hover': { bgcolor: dt.success.subtle },
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1.5,
+                                  p: 1.5,
+                                  borderRadius: '12px',
+                                  bgcolor: dt.bg.deep,
+                                  border: `1px solid ${dt.border.default}`,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  '&:hover': {
+                                    bgcolor: dt.bg.elevated,
+                                    borderColor: dt.border.strong,
+                                    transform: 'translateX(4px)',
+                                  },
                                 }}
                               >
-                                <AddCircleIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="忽略" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleSuggestion(s.id, 'dismiss')}
-                                sx={{
-                                  color: COLORS.textMuted,
-                                  '&:hover': { bgcolor: dt.danger.subtle, color: COLORS.danger },
-                                }}
-                              >
-                                <CloseIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
+                                <Avatar
+                                  sx={{
+                                    width: 32,
+                                    height: 32,
+                                    bgcolor: config.chipBg,
+                                    color: config.chipColor,
+                                  }}
+                                >
+                                  {config.icon}
+                                </Avatar>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: COLORS.textPrimary,
+                                      fontWeight: 600,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {item.title}
+                                  </Typography>
+                                  <Typography variant="caption" sx={{ color: COLORS.textMuted }}>
+                                    {item.detail}
+                                  </Typography>
+                                </Box>
+                                <Chip
+                                  label={config.label}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: config.chipBg,
+                                    color: config.chipColor,
+                                    fontWeight: 600,
+                                    fontSize: '0.7rem',
+                                    height: 22,
+                                    border: `1px solid ${config.chipColor}30`,
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <ArrowRightIcon sx={{ color: COLORS.textMuted, fontSize: 18, flexShrink: 0 }} />
+                              </Box>
+                            );
+                          })}
                         </Box>
-                      ))}
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Fade>
-            )}
+                      )}
+                    </CardContent>
+                  </Card>
+                </Fade>
+              );
+            })()}
+
+            {/* Topic Suggestion: Button + Results */}
+            <Card sx={{ ...CARD_STYLE, mb: 3, '&:hover': { ...CARD_STYLE['&:hover'], transform: 'none' } }} elevation={0}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: suggestedTopics.length > 0 ? 2 : 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LightbulbIcon sx={{ color: COLORS.warning, fontSize: 18 }} />
+                    <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
+                      话题推荐
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    onClick={handleGenerateSuggestions}
+                    disabled={suggesting}
+                    startIcon={suggesting ? <CircularProgress size={14} sx={{ color: COLORS.accent }} /> : <SparkleIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      color: COLORS.accent,
+                      border: `1px solid ${dt.accent.border}`,
+                      borderRadius: '10px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      px: 2,
+                      '&:hover': {
+                        bgcolor: dt.accent.subtle,
+                        borderColor: COLORS.accent,
+                      },
+                    }}
+                  >
+                    {suggesting ? 'AI 分析中...' : 'AI 推荐话题'}
+                  </Button>
+                </Box>
+
+                {suggestedTopics.length > 0 && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    {suggestedTopics.map((s) => (
+                      <Box
+                        key={s.id}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          p: 1.5,
+                          borderRadius: '12px',
+                          bgcolor: dt.bg.deep,
+                          border: `1px solid ${dt.border.default}`,
+                        }}
+                      >
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 600 }}>
+                            {s.name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: COLORS.textSecondary, fontSize: '0.82rem' }}>
+                            {s.reason}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                          <Tooltip title="采纳话题" arrow>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleSuggestion(s.id, 'accept')}
+                              sx={{
+                                color: COLORS.success,
+                                border: `1px solid ${COLORS.success}30`,
+                                '&:hover': { bgcolor: dt.success.subtle },
+                              }}
+                            >
+                              <AddCircleIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="忽略" arrow>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleSuggestion(s.id, 'dismiss')}
+                              sx={{
+                                color: COLORS.textMuted,
+                                '&:hover': { bgcolor: dt.danger.subtle, color: COLORS.danger },
+                              }}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+
+                {suggestedTopics.length === 0 && !suggesting && (
+                  <Typography variant="body2" sx={{ color: COLORS.textMuted, mt: 1, textAlign: 'center' }}>
+                    点击「AI 推荐话题」，根据飞书对话和项目数据生成话题建议
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Main Content Grid */}
             <Grid container spacing={2.5}>
@@ -878,6 +1116,62 @@ export default function InsightsPage() {
                       </CardContent>
                     </Card>
                   </Fade>
+
+                  {/* Sentiment Summary */}
+                  {data.sentiment && data.sentiment.totalReviews > 0 && (
+                    <Fade in timeout={1400}>
+                      <Card sx={CARD_STYLE} elevation={0}>
+                        <CardContent sx={{ p: 2.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                            <SentimentIcon sx={{ color: COLORS.danger, fontSize: 18 }} />
+                            <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
+                              舆情监控
+                            </Typography>
+                            <Chip
+                              label={`${data.sentiment.totalReviews} 条`}
+                              size="small"
+                              sx={{
+                                ml: 'auto',
+                                bgcolor: dt.bg.deep,
+                                color: COLORS.textMuted,
+                                fontWeight: 600,
+                                fontSize: '0.7rem',
+                                height: 22,
+                              }}
+                            />
+                          </Box>
+                          <MiniStatRow
+                            icon={<CheckIcon sx={{ fontSize: 16 }} />}
+                            label="正面评论"
+                            value={data.sentiment.positive}
+                            color={COLORS.success}
+                          />
+                          <MiniStatRow
+                            icon={<DotIcon sx={{ fontSize: 16 }} />}
+                            label="中性评论"
+                            value={data.sentiment.neutral}
+                            color={COLORS.warning}
+                          />
+                          <MiniStatRow
+                            icon={<WarningIcon sx={{ fontSize: 16 }} />}
+                            label="负面评论"
+                            value={data.sentiment.negative}
+                            color={COLORS.danger}
+                          />
+                          {data.sentiment.topIssues.length > 0 && (
+                            <>
+                              <Divider sx={{ my: 1.5, borderColor: COLORS.cardBorder }} />
+                              <TopList
+                                title="热点问题"
+                                items={data.sentiment.topIssues.map(i => ({ name: i.tag, count: i.count }))}
+                                emptyText="暂无问题数据"
+                              />
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Fade>
+                  )}
                 </Box>
               </Grid>
             </Grid>
