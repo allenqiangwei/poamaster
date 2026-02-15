@@ -27,6 +27,7 @@ import {
   Group as GroupIcon,
   Person as PersonIcon,
   Settings as SettingsIcon,
+  MonitorHeart as PulseIcon,
 } from '@mui/icons-material';
 
 /** Shorten a numeric ID to last 6 chars */
@@ -194,6 +195,21 @@ export default function FeishuPage() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Team Pulse Entry */}
+      <Card sx={{ mb: 4 }}>
+        <CardActionArea onClick={() => router.push('/feishu/pulse')}>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <PulseIcon color="primary" sx={{ fontSize: 40 }} />
+            <Box>
+              <Typography variant="h6">团队脉搏</Typography>
+              <Typography variant="body2" color="text.secondary">
+                从群聊中提取运营信号，查看团队动态和每日摘要
+              </Typography>
+            </Box>
+          </CardContent>
+        </CardActionArea>
+      </Card>
 
       {/* Recent Chats */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
