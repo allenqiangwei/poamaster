@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Paper,
   Typography,
   Button,
@@ -33,6 +32,7 @@ import {
   MenuItem,
   ToggleButtonGroup,
   ToggleButton,
+  Skeleton,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -73,6 +73,15 @@ interface Assignee {
     tasks: number;
     confirmedItems: number;
   };
+}
+
+interface AssigneeProfile {
+  messageCount: number;
+  activeChatCount: number;
+  completionRate: number;
+  taskCountByStatus: Record<string, number>;
+  unresolvedSignals: number;
+  sentimentTrend: { date: string; sentiment: number }[];
 }
 
 interface AssigneeDetailPageProps {
@@ -356,15 +365,15 @@ function UploadDialog({
             mt: 2,
             p: 4,
             border: '2px dashed',
-            borderColor: isDragging ? 'primary.main' : file ? 'success.main' : 'grey.300',
+            borderColor: isDragging ? 'primary.main' : file ? 'success.main' : 'divider',
             borderRadius: 2,
-            bgcolor: isDragging ? 'primary.50' : file ? 'success.50' : 'grey.50',
+            bgcolor: isDragging ? 'rgba(96,165,250,0.06)' : file ? 'rgba(74,222,128,0.06)' : 'transparent',
             textAlign: 'center',
             cursor: loading ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s ease',
             '&:hover': {
-              borderColor: loading ? 'grey.300' : 'primary.main',
-              bgcolor: loading ? 'grey.50' : 'primary.50',
+              borderColor: loading ? 'divider' : 'primary.main',
+              bgcolor: loading ? 'transparent' : 'rgba(96,165,250,0.06)',
             },
           }}
           onDragEnter={handleDragEnter}
@@ -393,7 +402,7 @@ function UploadDialog({
             disabled={loading}
             style={{ display: 'none' }}
           />
-          <UploadFileIcon sx={{ fontSize: 48, color: isDragging ? 'primary.main' : file ? 'success.main' : 'grey.400', mb: 1 }} />
+          <UploadFileIcon sx={{ fontSize: 48, color: isDragging ? 'primary.main' : file ? 'success.main' : 'text.secondary', mb: 1 }} />
           {file ? (
             <>
               <Typography variant="body1" color="success.main" fontWeight={500}>
@@ -530,6 +539,10 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
   // 发送飞书状态
   const [sendingToFeishu, setSendingToFeishu] = useState(false);
 
+  // 综合画像
+  const [profile, setProfile] = useState<AssigneeProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
   useEffect(() => {
     const loadParams = async () => {
       const resolvedParams = await params;
@@ -541,8 +554,35 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
   useEffect(() => {
     if (assigneeId) {
       loadAssignee();
+      loadProfile();
     }
   }, [assigneeId]);
+
+  const loadProfile = async () => {
+    if (!assigneeId) return;
+    setProfileLoading(true);
+    try {
+      const res = await fetch(`/api/assignees/${assigneeId}/profile`, { credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        setProfile(data.data);
+      }
+    } catch {
+      // Profile is optional — silently ignore errors
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const getSentimentLabel = (trend: { date: string; sentiment: number }[]): string => {
+    if (!trend || trend.length < 2) return '数据不足';
+    const first = trend[0].sentiment;
+    const last = trend[trend.length - 1].sentiment;
+    const diff = last - first;
+    if (diff > 0.1) return '上升';
+    if (diff < -0.1) return '下降';
+    return '稳定';
+  };
 
   const loadAssignee = async () => {
     setLoading(true);
@@ -814,22 +854,22 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
         <Typography>加载中...</Typography>
-      </Container>
+      </Box>
     );
   }
 
   if (!assignee) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
         <Alert severity="error">负责人不存在</Alert>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton onClick={() => router.back()} sx={{ mr: 2 }} aria-label="返回">
@@ -862,6 +902,111 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
           上传对话
         </Button>
       </Box>
+
+      {/* Profile Section */}
+      <Paper sx={{ mt: 3 }}>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h6">综合画像</Typography>
+        </Box>
+        <Box sx={{ p: 2 }}>
+          {profileLoading ? (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {[1, 2, 3, 4].map((i) => (
+                <Box key={i} sx={{ flex: 1, p: 2 }}>
+                  <Skeleton variant="text" width="60%" height={40} />
+                  <Skeleton variant="text" width="80%" />
+                </Box>
+              ))}
+            </Box>
+          ) : profile ? (
+            <>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Box
+                  sx={{
+                    flex: '1 1 140px',
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    textAlign: 'center',
+                    minWidth: 140,
+                  }}
+                >
+                  <Typography variant="h4" fontWeight={700} color="primary.main">
+                    {profile.messageCount}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    本周消息 (条)
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    flex: '1 1 140px',
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    textAlign: 'center',
+                    minWidth: 140,
+                  }}
+                >
+                  <Typography variant="h4" fontWeight={700} color="info.main">
+                    {profile.activeChatCount}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    活跃群数 (个)
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    flex: '1 1 140px',
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    textAlign: 'center',
+                    minWidth: 140,
+                  }}
+                >
+                  <Typography variant="h4" fontWeight={700} color="success.main">
+                    {profile.completionRate}%
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    任务完成率
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    flex: '1 1 140px',
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    textAlign: 'center',
+                    minWidth: 140,
+                  }}
+                >
+                  <Typography variant="h4" fontWeight={700} color="warning.main">
+                    {profile.unresolvedSignals}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    活跃信号 (个)
+                  </Typography>
+                </Box>
+              </Box>
+              {profile.sentimentTrend && profile.sentimentTrend.length > 0 && (
+                <Box sx={{ mt: 2, px: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    情绪趋势：{getSentimentLabel(profile.sentimentTrend)}
+                  </Typography>
+                </Box>
+              )}
+            </>
+          ) : (
+            <Box sx={{ p: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                暂无画像数据
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </Paper>
 
       {/* Tasks Table */}
       <Paper sx={{ mt: 3 }}>
@@ -970,7 +1115,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
                       <Paper
                         key={item.id}
                         variant="outlined"
-                        sx={{ p: 2, bgcolor: 'grey.50' }}
+                        sx={{ p: 2, bgcolor: 'transparent' }}
                       >
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <Box sx={{ flex: 1 }}>
@@ -1146,7 +1291,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
               }}
             />
             {todoDialog.item?.sourceText && (
-              <Box sx={{ p: 1.5, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Box sx={{ p: 1.5, bgcolor: 'transparent', borderRadius: 1 }}>
                 <Typography variant="caption" color="text.secondary">
                   来源: {todoDialog.item.sourceText.length > 150
                     ? todoDialog.item.sourceText.substring(0, 150) + '...'
@@ -1198,7 +1343,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
                 variant="outlined"
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.50',
+                  bgcolor: 'transparent',
                   whiteSpace: 'pre-wrap',
                   fontFamily: 'inherit',
                   fontSize: '0.95rem',
@@ -1259,6 +1404,6 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 }
