@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 
 const CLAUDE_PATH = '/opt/homebrew/bin/claude';
 const DEFAULT_MODEL = 'sonnet';
-const MAX_TURNS = '5';
+const MAX_TURNS = '15';
 const TIMEOUT_MS = 180000;
 const MAX_BUFFER = 10 * 1024 * 1024;
 
@@ -73,11 +73,15 @@ export async function callClaude(
 
       try {
         const parsed = JSON.parse(stdout);
-        if (!parsed.result) {
+        let result = parsed.result || '';
+        if (!result && parsed.subtype === 'error_max_turns') {
+          console.warn('[claude-bridge] Hit max turns limit. Turns:', parsed.num_turns);
+          result = '抱歉，这个问题比较复杂，我在处理过程中达到了回合数限制。请尝试简化问题或拆分成多个小问题。';
+        } else if (!result) {
           console.warn('[claude-bridge] Empty result. Full response:', stdout.slice(0, 500));
         }
         resolve({
-          result: parsed.result || '',
+          result,
           sessionId: parsed.session_id,
           cost: parsed.total_cost_usd ?? 0,
           durationMs: parsed.duration_ms ?? 0,
