@@ -329,9 +329,15 @@ export default function ChatBubble() {
                         py: 1,
                         borderRadius: 2,
                         backgroundColor: dt.bg.deep,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
                       }}
                     >
                       <CircularProgress size={16} />
+                      <Typography variant="caption" color="text.secondary">
+                        Claude 正在思考...
+                      </Typography>
                     </Box>
                   </Box>
                 )}
