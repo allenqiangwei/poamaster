@@ -31,6 +31,21 @@ export async function GET(
 
     const thread = await prisma.botConversation.findUnique({
       where: { chatId: threadId },
+      include: {
+        botMessages: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            role: true,
+            content: true,
+            status: true,
+            progress: true,
+            errorMessage: true,
+            unread: true,
+            createdAt: true,
+          },
+        },
+      },
     });
 
     if (!thread || thread.source !== 'web') {
@@ -40,13 +55,25 @@ export async function GET(
       );
     }
 
+    // Mark all unread messages as read when the thread is opened
+    if (thread.hasUnread) {
+      await prisma.botMessage.updateMany({
+        where: { conversationId: thread.id, unread: true },
+        data: { unread: false },
+      });
+      await prisma.botConversation.update({
+        where: { id: thread.id },
+        data: { hasUnread: false },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         id: thread.id,
         chatId: thread.chatId,
         title: thread.title,
-        messages: thread.messages,
+        messages: thread.botMessages,
       },
     });
   } catch (error) {
