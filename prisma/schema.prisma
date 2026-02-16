@@ -35,6 +35,8 @@ model Assignee {
   artifacts      Artifact[]
   confirmedItems ConfirmedItem[]
   tasks          Task[]
+  objectives     Objective[]
+  keyResults     KeyResult[]
 
   @@index([name])
 }
@@ -844,4 +846,57 @@ model AlertSenderWhitelist {
   createdAt  DateTime @default(now())
 
   @@index([senderId])
+}
+
+enum OkrPeriodType {
+  QUARTERLY
+  MONTHLY
+  ANNUAL
+}
+
+enum OkrStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model Objective {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  periodType  OkrPeriodType @default(QUARTERLY)
+  periodLabel String
+  status      OkrStatus     @default(ACTIVE)
+  weight      Float         @default(1.0)
+  ownerId     String?
+  parentId    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  owner       Assignee?     @relation(fields: [ownerId], references: [id])
+  parent      Objective?    @relation("ObjectiveHierarchy", fields: [parentId], references: [id])
+  children    Objective[]   @relation("ObjectiveHierarchy")
+  keyResults  KeyResult[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([periodLabel])
+}
+
+model KeyResult {
+  id           String    @id @default(cuid())
+  objectiveId  String
+  title        String
+  targetValue  Float
+  currentValue Float     @default(0)
+  unit         String    @default("%")
+  weight       Float     @default(1.0)
+  ownerId      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  objective    Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  owner        Assignee? @relation(fields: [ownerId], references: [id])
+
+  @@index([objectiveId])
+  @@index([ownerId])
 }
