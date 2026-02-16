@@ -26,7 +26,30 @@ export async function GET(req: NextRequest) {
       orderBy: { madeAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, data: decisions });
+    // Aggregate stats
+    const allDecisions = await prisma.decision.findMany({
+      select: { status: true, madeAt: true, updatedAt: true },
+    });
+    const total = allDecisions.length;
+    const completed = allDecisions.filter(d => d.status === 'COMPLETED').length;
+    const revised = allDecisions.filter(d => d.status === 'REVISED').length;
+    const denominator = total - revised;
+    const executionRate = denominator > 0 ? Math.round((completed / denominator) * 100) : 0;
+
+    const completedWithTime = allDecisions.filter(d => d.status === 'COMPLETED');
+    let avgClosureDays: number | null = null;
+    if (completedWithTime.length > 0) {
+      const totalDays = completedWithTime.reduce((sum, d) => {
+        return sum + (d.updatedAt.getTime() - d.madeAt.getTime()) / (1000 * 60 * 60 * 24);
+      }, 0);
+      avgClosureDays = Math.round((totalDays / completedWithTime.length) * 10) / 10;
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: decisions,
+      stats: { total, completed, executionRate, avgClosureDays },
+    });
   } catch (error) {
     console.error('Failed to list decisions:', error);
     return NextResponse.json({ success: false, error: 'Failed to list decisions' }, { status: 500 });
