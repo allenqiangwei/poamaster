@@ -11,21 +11,21 @@ import {
   ToggleButtonGroup,
   CircularProgress,
   Alert,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   Avatar,
   Chip,
   Pagination,
   InputAdornment,
   IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Button,
+  alpha,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -34,7 +34,11 @@ import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   BlockOutlined as BlockIcon,
+  Chat as ChatIcon,
+  MoreVert as MoreIcon,
 } from '@mui/icons-material';
+import { designTokens as dt } from '@/lib/theme';
+import { useResponsive } from '@/hooks/useResponsive';
 
 interface Chat {
   id: string;
@@ -57,6 +61,7 @@ function chatDisplayName(chat: Chat): string {
 
 export default function FeishuChatsPage() {
   const router = useRouter();
+  const { isMobile } = useResponsive();
   const [chats, setChats] = useState<Chat[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -65,6 +70,10 @@ export default function FeishuChatsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Mobile context menu
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [menuChat, setMenuChat] = useState<Chat | null>(null);
 
   // Rename dialog state
   const [renameOpen, setRenameOpen] = useState(false);
@@ -174,20 +183,23 @@ export default function FeishuChatsPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <IconButton onClick={() => router.push('/feishu')}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4">对话列表</Typography>
-        <Chip label={`共 ${total} 个`} variant="outlined" size="small" />
-        <Box sx={{ flex: 1 }} />
-        <Button
-          size="small"
-          startIcon={<BlockIcon />}
-          onClick={() => router.push('/feishu/blacklist')}
-        >
-          黑名单管理
-        </Button>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, mb: 3, gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton onClick={() => router.push('/feishu')}>
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h4">对话列表</Typography>
+          <Chip label={`共 ${total} 个`} variant="outlined" size="small" />
+        </Box>
+        <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
+          <Button
+            size="small"
+            startIcon={<BlockIcon />}
+            onClick={() => router.push('/feishu/alerts?tab=blacklist')}
+          >
+            黑名单管理
+          </Button>
+        </Box>
       </Box>
 
       {/* Search & Filter */}
@@ -197,7 +209,7 @@ export default function FeishuChatsPage() {
           size="small"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          sx={{ minWidth: 300 }}
+          sx={{ minWidth: { xs: '100%', sm: 300 } }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -230,97 +242,127 @@ export default function FeishuChatsPage() {
         </Alert>
       ) : (
         <>
-          <Card>
-            <List disablePadding>
-              {chats.map((chat, index) => {
-                const displayName = chatDisplayName(chat);
-                const isUnnamed = !chat.name || chat.name === chat.chatId;
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 1 : 0 }}>
+            {chats.map((chat, index) => {
+              const displayName = chatDisplayName(chat);
+              const isUnnamed = !chat.name || chat.name === chat.chatId;
+              const isGroup = chat.chatType === 'group';
+              const lastActive = chat.lastMessage
+                ? new Date(chat.lastMessage).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : null;
 
-                return (
-                  <ListItem
-                    key={chat.id}
-                    divider={index < chats.length - 1}
-                    secondaryAction={
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Tooltip title="拉黑">
-                          <IconButton size="small" onClick={(e) => handleBlacklist(chat, e)}>
-                            <BlockIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="重命名">
-                          <IconButton size="small" onClick={(e) => openRenameDialog(chat, e)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        {chat.memberCount && (
-                          <Chip
-                            label={`${chat.memberCount} 人`}
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
-                        <Chip
-                          label={`${chat._count.messages} 条消息`}
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                        />
-                      </Box>
-                    }
-                    sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                    onClick={() => router.push(`/feishu/chats/${chat.chatId}`)}
+              return (
+                <Box
+                  key={chat.id}
+                  onClick={() => router.push(`/feishu/chats/${chat.chatId}`)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 2,
+                    py: 1.5,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    borderRadius: isMobile ? 2 : 0,
+                    bgcolor: isMobile ? dt.bg.card : 'transparent',
+                    borderBottom: !isMobile && index < chats.length - 1 ? `1px solid ${dt.border.subtle}` : 'none',
+                    '&:hover': { bgcolor: alpha(dt.accent.main, 0.04) },
+                  }}
+                >
+                  {/* Avatar */}
+                  <Avatar
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: isGroup ? alpha(dt.accent.main, 0.12) : alpha(dt.purple.main, 0.12),
+                      color: isGroup ? dt.accent.main : dt.purple.main,
+                      flexShrink: 0,
+                    }}
                   >
-                    <ListItemAvatar>
-                      <Avatar sx={{ bgcolor: chat.chatType === 'group' ? 'primary.main' : 'secondary.main' }}>
-                        {chat.chatType === 'group' ? <GroupIcon /> : <PersonIcon />}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      disableTypography
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography
-                            variant="body1"
-                            sx={{
-                              fontWeight: isUnnamed ? 'normal' : 'medium',
-                              color: isUnnamed ? 'text.secondary' : 'text.primary',
-                              fontFamily: isUnnamed ? 'monospace' : 'inherit',
-                            }}
-                          >
-                            {displayName}
-                          </Typography>
-                          {isUnnamed && (
-                            <Chip
-                              label="未命名"
-                              size="small"
-                              color="warning"
-                              variant="outlined"
-                              sx={{ height: 20, fontSize: '0.65rem' }}
-                            />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 0.5 }}>
-                          <Chip
-                            label={chat.chatType === 'group' ? '群聊' : '私聊'}
-                            size="small"
-                            variant="outlined"
-                            sx={{ height: 20, fontSize: '0.7rem' }}
-                          />
-                          {chat.lastMessage && (
-                            <Typography variant="caption" color="text.secondary">
-                              最后活跃: {new Date(chat.lastMessage).toLocaleString('zh-CN')}
-                            </Typography>
-                          )}
-                        </Box>
-                      }
-                    />
-                  </ListItem>
-                );
-              })}
-            </List>
-          </Card>
+                    {isGroup ? <GroupIcon sx={{ fontSize: 20 }} /> : <PersonIcon sx={{ fontSize: 20 }} />}
+                  </Avatar>
+
+                  {/* Content */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* Row 1: name + time */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                      <Typography
+                        variant="body2"
+                        noWrap
+                        sx={{
+                          flex: 1,
+                          fontWeight: isUnnamed ? 400 : 600,
+                          color: isUnnamed ? dt.text.muted : dt.text.primary,
+                          fontFamily: isUnnamed ? 'monospace' : 'inherit',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        {displayName}
+                      </Typography>
+                      {isUnnamed && (
+                        <Chip
+                          label="未命名"
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-label': { px: 0.75 } }}
+                        />
+                      )}
+                      {lastActive && (
+                        <Typography
+                          variant="caption"
+                          sx={{ color: dt.text.muted, flexShrink: 0, fontSize: '0.7rem', whiteSpace: 'nowrap' }}
+                        >
+                          {lastActive}
+                        </Typography>
+                      )}
+                    </Box>
+                    {/* Row 2: type + message count */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: isGroup ? dt.accent.main : dt.purple.main,
+                          fontWeight: 500,
+                          fontSize: '0.7rem',
+                        }}
+                      >
+                        {isGroup ? '群聊' : '私聊'}
+                        {isGroup && chat.memberCount ? ` · ${chat.memberCount}人` : ''}
+                      </Typography>
+                      <Box sx={{ flex: 1 }} />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <ChatIcon sx={{ fontSize: 12, color: dt.text.muted }} />
+                        <Typography variant="caption" sx={{ color: dt.text.muted, fontSize: '0.7rem' }}>
+                          {chat._count.messages}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+
+                  {/* Actions */}
+                  {isMobile ? (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuChat(chat); }}
+                      sx={{ flexShrink: 0, opacity: 0.4 }}
+                    >
+                      <MoreIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  ) : (
+                    <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0, opacity: 0.4, '&:hover': { opacity: 1 } }}>
+                      <IconButton size="small" onClick={(e) => handleBlacklist(chat, e)} title="拉黑">
+                        <BlockIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                      <IconButton size="small" onClick={(e) => openRenameDialog(chat, e)} title="重命名">
+                        <EditIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
 
           {totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
@@ -329,11 +371,30 @@ export default function FeishuChatsPage() {
                 page={page}
                 onChange={(_, p) => setPage(p)}
                 color="primary"
+                size={isMobile ? 'small' : 'medium'}
               />
             </Box>
           )}
         </>
       )}
+
+      {/* Mobile context menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => { setMenuAnchor(null); setMenuChat(null); }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={(e) => { if (menuChat) openRenameDialog(menuChat, e as unknown as React.MouseEvent); setMenuAnchor(null); }}>
+          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>重命名</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={(e) => { if (menuChat) handleBlacklist(menuChat, e as unknown as React.MouseEvent); setMenuAnchor(null); setMenuChat(null); }}>
+          <ListItemIcon><BlockIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>拉黑</ListItemText>
+        </MenuItem>
+      </Menu>
 
       {/* Rename Dialog */}
       <Dialog open={renameOpen} onClose={() => setRenameOpen(false)} maxWidth="sm" fullWidth>

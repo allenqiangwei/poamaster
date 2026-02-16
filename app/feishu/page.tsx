@@ -28,6 +28,7 @@ import {
   Person as PersonIcon,
   Settings as SettingsIcon,
   MonitorHeart as PulseIcon,
+  NotificationsActive as AlertIcon,
 } from '@mui/icons-material';
 
 /** Shorten a numeric ID to last 6 chars */
@@ -211,6 +212,21 @@ export default function FeishuPage() {
         </CardActionArea>
       </Card>
 
+      {/* Alert Settings Entry */}
+      <Card sx={{ mb: 4 }}>
+        <CardActionArea onClick={() => router.push('/feishu/alerts')}>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <AlertIcon color="warning" sx={{ fontSize: 40 }} />
+            <Box>
+              <Typography variant="h6">预警设置</Typography>
+              <Typography variant="body2" color="text.secondary">
+                管理预警关键词规则、黑白名单、通知偏好和阈值配置
+              </Typography>
+            </Box>
+          </CardContent>
+        </CardActionArea>
+      </Card>
+
       {/* Recent Chats */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="h6">最近活跃对话</Typography>
@@ -270,6 +286,7 @@ export default function FeishuPage() {
                       )}
                     </Box>
                   }
+                  secondaryTypographyProps={{ component: 'div' }}
                 />
               </ListItem>
             ))}
