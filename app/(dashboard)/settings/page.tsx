@@ -44,6 +44,7 @@ export default function SettingsPage() {
     'x.username': '',
     'x.password': '',
     'x.email': '',
+    'bot.allowedUsers': '',
   });
   const [availableModels, setAvailableModels] = useState<OpenAIModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -305,6 +306,15 @@ export default function SettingsPage() {
             setConfigs({ ...configs, 'feishu.cookie': e.target.value })
           }
           helperText="从飞书网页版获取的 Cookie（加密存储）"
+        />
+        <TextField
+          fullWidth
+          label="Bot 白名单用户"
+          value={configs['bot.allowedUsers']}
+          onChange={(e) => setConfigs({ ...configs, 'bot.allowedUsers': e.target.value })}
+          helperText="允许使用 Claude AI Bot 的用户，多个用逗号分隔（姓名或飞书用户ID）。留空则所有用户均可使用。"
+          margin="normal"
+          placeholder="张三,李四,ou_abc123"
         />
       </Paper>
 
