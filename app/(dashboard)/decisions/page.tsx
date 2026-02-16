@@ -26,6 +26,7 @@ import {
   DialogActions,
   TextField,
   CircularProgress,
+  LinearProgress,
 } from '@mui/material';
 import { Add as AddIcon, Gavel as GavelIcon } from '@mui/icons-material';
 
@@ -73,6 +74,12 @@ export default function DecisionsPage() {
     message: string;
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
+  const [stats, setStats] = useState<{
+    total: number;
+    completed: number;
+    executionRate: number;
+    avgClosureDays: number | null;
+  } | null>(null);
 
   const loadDecisions = useCallback(async () => {
     setLoading(true);
@@ -88,6 +95,7 @@ export default function DecisionsPage() {
       const data = await res.json();
       if (data.success) {
         setDecisions(data.data);
+        if (data.stats) setStats(data.stats);
       } else {
         throw new Error(data.error || '加载决策列表失败');
       }
@@ -181,6 +189,29 @@ export default function DecisionsPage() {
         </Button>
       </Box>
 
+      {stats && (
+        <Box sx={{ display: 'flex', gap: 3, mb: 2, flexWrap: 'wrap' }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>{stats.total}</Typography>
+            <Typography variant="caption" color="text.secondary">总决策</Typography>
+          </Box>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>{stats.executionRate}%</Typography>
+            <Typography variant="caption" color="text.secondary">执行率</Typography>
+          </Box>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>{stats.completed}</Typography>
+            <Typography variant="caption" color="text.secondary">已完成</Typography>
+          </Box>
+          {stats.avgClosureDays !== null && (
+            <Box>
+              <Typography variant="h4" sx={{ fontWeight: 700 }}>{stats.avgClosureDays}</Typography>
+              <Typography variant="caption" color="text.secondary">平均闭环(天)</Typography>
+            </Box>
+          )}
+        </Box>
+      )}
+
       <Tabs
         value={currentTab}
         onChange={(_, value) => setCurrentTab(value)}
@@ -218,13 +249,25 @@ export default function DecisionsPage() {
                   <TableCell>状态</TableCell>
                   <TableCell>复盘日期</TableCell>
                   <TableCell align="center">关联任务数</TableCell>
+                  <TableCell>执行进度</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {decisions.map((decision) => {
                   const statusInfo = statusLabels[decision.status] || statusLabels.PENDING;
                   return (
-                    <TableRow key={decision.id} hover>
+                    <TableRow
+                      key={decision.id}
+                      hover
+                      sx={{
+                        ...(decision.reviewDate &&
+                          new Date(decision.reviewDate) < new Date() &&
+                          decision.status !== 'COMPLETED' &&
+                          decision.status !== 'REVISED'
+                          ? { bgcolor: 'rgba(239, 68, 68, 0.04)' }
+                          : {}),
+                      }}
+                    >
                       <TableCell>
                         <Typography
                           sx={{
@@ -246,13 +289,51 @@ export default function DecisionsPage() {
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>{formatDate(decision.reviewDate)}</TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: decision.reviewDate &&
+                              new Date(decision.reviewDate) < new Date() &&
+                              decision.status !== 'COMPLETED' &&
+                              decision.status !== 'REVISED'
+                              ? 'error.main'
+                              : 'text.primary',
+                            fontWeight: decision.reviewDate &&
+                              new Date(decision.reviewDate) < new Date() &&
+                              decision.status !== 'COMPLETED' &&
+                              decision.status !== 'REVISED'
+                              ? 600
+                              : 400,
+                          }}
+                        >
+                          {formatDate(decision.reviewDate)}
+                        </Typography>
+                      </TableCell>
                       <TableCell align="center">
                         <Chip
                           label={decision.tasks?.length ?? 0}
                           size="small"
                           variant="outlined"
                         />
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const tasks = decision.tasks || [];
+                          if (tasks.length === 0) return <Typography variant="caption" color="text.secondary">-</Typography>;
+                          const done = tasks.filter((t: any) => t.status === 'DONE').length;
+                          const pct = Math.round((done / tasks.length) * 100);
+                          return (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 100 }}>
+                              <LinearProgress
+                                variant="determinate"
+                                value={pct}
+                                sx={{ flex: 1, height: 6, borderRadius: 3 }}
+                              />
+                              <Typography variant="caption" sx={{ minWidth: 30 }}>{pct}%</Typography>
+                            </Box>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                   );
