@@ -34,6 +34,7 @@ export interface DailyData {
     overdueTasks: Array<{ id: string; title: string; assignee: string; dueDate: string }>;
     unresolvedSignals: Array<{ id: string; type: string; severity: string; title: string; chatName: string }>;
     pendingDecisions: Array<{ id: string; title: string; madeBy: string; madeAt: string }>;
+    overdueDecisions: Array<{ id: string; title: string; madeBy: string; reviewDate: string }>;
   };
   decisionStats?: {
     total: number;
@@ -78,6 +79,7 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
     priorityOverdue,
     prioritySignals,
     priorityDecisions,
+    overdueDecisions,
     decisionStatusCounts,
     completedDecisions,
     tasksByAssignee,
@@ -189,6 +191,16 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
       where: { status: 'PENDING' },
       take: 5,
       orderBy: { madeAt: 'desc' },
+    }),
+
+    // Priority: overdue decisions (reviewDate passed, not completed/revised)
+    prisma.decision.findMany({
+      where: {
+        status: { notIn: ['COMPLETED', 'REVISED'] },
+        reviewDate: { lt: now },
+      },
+      take: 5,
+      orderBy: { reviewDate: 'asc' },
     }),
 
     // Decision stats
@@ -332,6 +344,12 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
         title: d.title,
         madeBy: d.madeBy || '未指定',
         madeAt: d.madeAt.toISOString(),
+      })),
+      overdueDecisions: overdueDecisions.map(d => ({
+        id: d.id,
+        title: d.title,
+        madeBy: d.madeBy || '未指定',
+        reviewDate: d.reviewDate?.toISOString() || '',
       })),
     },
     sentiment: (() => {

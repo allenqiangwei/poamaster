@@ -79,6 +79,7 @@ interface DailyData {
     overdueTasks: Array<{ id: string; title: string; assignee: string; dueDate: string }>;
     unresolvedSignals: Array<{ id: string; type: string; severity: string; title: string; chatName: string }>;
     pendingDecisions: Array<{ id: string; title: string; madeBy: string; madeAt: string }>;
+    overdueDecisions: Array<{ id: string; title: string; madeBy: string; reviewDate: string }>;
   };
   decisionStats?: {
     total: number;
@@ -755,6 +756,13 @@ export default function InsightsPage() {
                   detail: `${d.madeBy} · ${new Date(d.madeAt).toLocaleDateString('zh-CN')}`,
                   href: `/decisions/${d.id}`,
                 })),
+                ...(data?.priorities?.overdueDecisions || []).map(d => ({
+                  id: d.id,
+                  type: 'overdueDecision' as const,
+                  title: `[逾期复盘] ${d.title}`,
+                  detail: `${d.madeBy} · 复盘日期 ${d.reviewDate ? new Date(d.reviewDate).toLocaleDateString('zh-CN') : ''}`,
+                  href: `/decisions/${d.id}`,
+                })),
               ];
 
               const priorityConfig = {
@@ -775,6 +783,12 @@ export default function InsightsPage() {
                   label: '决策',
                   chipColor: COLORS.accent,
                   chipBg: `${COLORS.accent}18`,
+                },
+                overdueDecision: {
+                  icon: <GavelIcon sx={{ fontSize: 18 }} />,
+                  label: '逾期决策',
+                  chipColor: COLORS.danger,
+                  chipBg: `${COLORS.danger}18`,
                 },
               };
 
