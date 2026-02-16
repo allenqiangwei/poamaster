@@ -1,0 +1,27 @@
+{
+  "name": "competitor-monitor",
+  "version": "1.0.0",
+  "description": "Competitive intelligence collector for POA Master",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "prisma:generate": "prisma generate --schema ../../prisma/schema.prisma"
+  },
+  "prisma": {
+    "schema": "../../prisma/schema.prisma"
+  },
+  "dependencies": {
+    "app-store-scraper": "^0.18.0",
+    "google-play-scraper": "^9.1.1",
+    "cheerio": "^1.0.0",
+    "rss-parser": "^3.13.0",
+    "node-cron": "^3.0.0",
+    "sentiment": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
