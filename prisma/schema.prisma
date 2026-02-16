@@ -354,6 +354,8 @@ model FeishuChat {
   updatedAt     DateTime        @updatedAt
   isBlacklisted Boolean         @default(false)
   blacklistedAt DateTime?
+  isWhitelisted   Boolean  @default(false)
+  whitelistedAt   DateTime?
   isRenamed     Boolean         @default(false)
   digests       ChatDigest[]
   signals       ChatSignal[]
@@ -670,6 +672,108 @@ model BotMessage {
   @@index([updatedAt])
 }
 
+model Competitor {
+  id           String                  @id @default(cuid())
+  name         String
+  company      String?
+  appStoreId   String?
+  googlePlayId String?
+  websiteUrl   String?
+  monitorUrls  Json                    @default("[]")
+  rssFeeds     Json                    @default("[]")
+  keywords     Json                    @default("[]")
+  enabled      Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  appSnapshots CompetitorAppSnapshot[]
+  reviews      CompetitorReview[]
+  webChanges   CompetitorWebChange[]
+  news         CompetitorNews[]
+  alerts       CompetitorAlert[]
+
+  @@index([enabled])
+}
+
+model CompetitorAppSnapshot {
+  id           String     @id @default(cuid())
+  competitorId String
+  platform     String
+  rating       Float?
+  ratingCount  Int?
+  version      String?
+  releaseNotes String?
+  snapshotData Json?
+  createdAt    DateTime   @default(now())
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, createdAt])
+}
+
+model CompetitorReview {
+  id           String     @id @default(cuid())
+  competitorId String
+  platform     String
+  externalId   String
+  author       String?
+  rating       Int
+  title        String?
+  content      String
+  sentiment    Float?
+  tags         Json?
+  reviewDate   DateTime
+  createdAt    DateTime   @default(now())
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, externalId])
+  @@index([competitorId, reviewDate])
+}
+
+model CompetitorWebChange {
+  id           String     @id @default(cuid())
+  competitorId String
+  url          String
+  changeType   String
+  summary      String?
+  diffText     String?
+  previousHash String?
+  currentHash  String?
+  createdAt    DateTime   @default(now())
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, createdAt])
+}
+
+model CompetitorNews {
+  id           String      @id @default(cuid())
+  competitorId String?
+  title        String
+  url          String      @unique
+  source       String
+  summary      String?
+  impact       String?
+  category     String?
+  publishedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  competitor   Competitor? @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+
+  @@index([competitorId, createdAt])
+}
+
+model CompetitorAlert {
+  id           String     @id @default(cuid())
+  competitorId String
+  alertType    String
+  severity     String
+  title        String
+  summary      String
+  acknowledged Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, createdAt])
+  @@index([acknowledged])
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -716,4 +820,28 @@ enum DecisionStatus {
   EXECUTING
   COMPLETED
   REVISED
+}
+
+model AlertRule {
+  id         String   @id @default(cuid())
+  keyword    String
+  signalType String
+  severity   String   @default("MEDIUM")
+  isSystem   Boolean  @default(false)
+  isEnabled  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([isEnabled])
+  @@index([signalType])
+}
+
+model AlertSenderWhitelist {
+  id         String   @id @default(cuid())
+  senderId   String   @unique
+  senderName String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([senderId])
 }
