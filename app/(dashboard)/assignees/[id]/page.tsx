@@ -23,6 +23,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Card,
+  CardContent,
   Chip,
   Snackbar,
   TextField,
@@ -33,6 +35,7 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   Skeleton,
+  alpha,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -42,7 +45,12 @@ import {
   PlaylistAdd as AddToTodoIcon,
   AutoAwesome as InsightIcon,
   TextFields as TextFieldsIcon,
+  VisibilityOff as HideIcon,
+  Visibility as ShowIcon,
 } from '@mui/icons-material';
+import { designTokens as dt } from '@/lib/theme';
+import { useResponsive } from '@/hooks/useResponsive';
+import TaskStatusChip from '@/components/TaskStatusChip';
 import { TaskStatus } from '@prisma/client';
 import ModelSelectionDialog from '@/components/ModelSelectionDialog';
 
@@ -88,21 +96,7 @@ interface AssigneeDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  TODO: '待办',
-  IN_PROGRESS: '进行中',
-  DONE: '已完成',
-  CANCELLED: '已取消',
-  POSTPONED: '已推迟',
-};
-
-const STATUS_COLORS: Record<TaskStatus, 'default' | 'primary' | 'success' | 'error' | 'warning'> = {
-  TODO: 'default',
-  IN_PROGRESS: 'primary',
-  DONE: 'success',
-  CANCELLED: 'error',
-  POSTPONED: 'warning',
-};
+// STATUS_LABELS and STATUS_COLORS removed — now using TaskStatusChip component
 
 const DIMENSION_LABELS: Record<string, string> = {
   focus: '当前关注',
@@ -492,10 +486,12 @@ function UploadDialog({
 
 export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) {
   const router = useRouter();
+  const { isMobile } = useResponsive();
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [assignee, setAssignee] = useState<Assignee | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -543,6 +539,9 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
   const [profile, setProfile] = useState<AssigneeProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  // OKR 目标
+  const [okrData, setOkrData] = useState<any[]>([]);
+
   useEffect(() => {
     const loadParams = async () => {
       const resolvedParams = await params;
@@ -555,6 +554,13 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
     if (assigneeId) {
       loadAssignee();
       loadProfile();
+      // Load OKR data
+      fetch(`/api/okr?ownerId=${assigneeId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) setOkrData(data.data);
+        })
+        .catch(() => {});
     }
   }, [assigneeId]);
 
@@ -871,26 +877,28 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton onClick={() => router.back()} sx={{ mr: 2 }} aria-label="返回">
-          <ArrowBackIcon />
-        </IconButton>
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h4" gutterBottom>
-            {assignee.name}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            {assignee.feishuUserId && (
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3, flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 2, sm: 0 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+          <IconButton onClick={() => router.back()} sx={{ mr: 1 }} aria-label="返回">
+            <ArrowBackIcon />
+          </IconButton>
+          <Box>
+            <Typography variant="h4" gutterBottom sx={{ mb: 0.5 }}>
+              {assignee.name}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              {assignee.feishuUserId && (
+                <Typography variant="body2" color="text.secondary">
+                  飞书ID: <strong>{assignee.feishuUserId}</strong>
+                </Typography>
+              )}
               <Typography variant="body2" color="text.secondary">
-                飞书ID: <strong>{assignee.feishuUserId}</strong>
+                任务数: <strong>{assignee._count.tasks}</strong>
               </Typography>
-            )}
-            <Typography variant="body2" color="text.secondary">
-              任务数: <strong>{assignee._count.tasks}</strong>
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              洞察数: <strong>{assignee._count.confirmedItems}</strong>
-            </Typography>
+              <Typography variant="body2" color="text.secondary">
+                洞察数: <strong>{assignee._count.confirmedItems}</strong>
+              </Typography>
+            </Box>
           </Box>
         </Box>
         <Button
@@ -898,6 +906,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
           startIcon={<UploadFileIcon />}
           onClick={() => setUploadDialogOpen(true)}
           size="large"
+          sx={{ alignSelf: { xs: 'stretch', sm: 'auto' } }}
         >
           上传对话
         </Button>
@@ -1010,61 +1019,215 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
 
       {/* Tasks Table */}
       <Paper sx={{ mt: 3 }}>
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="h6">任务列表</Typography>
+          {assignee.tasks.length > 0 && (
+            <Button
+              size="small"
+              variant="text"
+              startIcon={showCompleted ? <HideIcon fontSize="small" /> : <ShowIcon fontSize="small" />}
+              onClick={() => setShowCompleted(!showCompleted)}
+              sx={{ fontSize: '0.8rem', color: dt.text.muted }}
+            >
+              {showCompleted ? '隐藏已完成' : '显示已完成'}
+              {!showCompleted && ` (${assignee.tasks.filter(t => t.status === 'DONE' || t.status === 'CANCELLED').length})`}
+            </Button>
+          )}
         </Box>
-        {assignee.tasks.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              暂无任务
-            </Typography>
-          </Box>
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>标题</TableCell>
-                  <TableCell>状态</TableCell>
-                  <TableCell>截止时间</TableCell>
-                  <TableCell>创建时间</TableCell>
-                  <TableCell align="right">操作</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {assignee.tasks.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell>
-                      <Typography variant="body2">{task.title}</Typography>
-                      {task.dod && (
-                        <Typography variant="caption" color="text.secondary">
-                          {task.dod}
+        {(() => {
+          const filteredTasks = assignee.tasks
+            .filter(t => showCompleted || (t.status !== 'DONE' && t.status !== 'CANCELLED'))
+            .sort((a, b) => {
+              // Tasks with due dates first, sorted nearest first; no due date at end
+              if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+              if (a.dueDate && !b.dueDate) return -1;
+              if (!a.dueDate && b.dueDate) return 1;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
+
+          if (filteredTasks.length === 0) {
+            return (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  {assignee.tasks.length === 0 ? '暂无任务' : '没有进行中的任务'}
+                </Typography>
+              </Box>
+            );
+          }
+
+          if (isMobile) {
+            return (
+              <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {filteredTasks.map((task) => {
+                  const isOverdue = task.dueDate && task.status !== 'DONE' && task.status !== 'CANCELLED' && new Date(task.dueDate) < new Date(new Date().toDateString());
+                  return (
+                    <Card
+                      key={task.id}
+                      sx={{
+                        bgcolor: isOverdue ? alpha(dt.danger.main, 0.06) : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => router.push(`/todo/${task.id}`)}
+                    >
+                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: dt.text.primary, mb: 0.5 }}>
+                          {task.title}
                         </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={STATUS_LABELS[task.status]}
-                        color={STATUS_COLORS[task.status]}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{formatDate(task.dueDate)}</TableCell>
-                    <TableCell>{formatDate(task.createdAt)}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => router.push(`/todo/${task.id}`)}
-                        color="primary"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </TableCell>
+                        {task.dod && (
+                          <Typography variant="caption" sx={{ color: dt.text.muted, fontStyle: 'italic', display: 'block', mb: 1 }}>
+                            {task.dod}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <TaskStatusChip status={task.status} />
+                          {task.dueDate && (
+                            <Typography variant="caption" sx={{ color: isOverdue ? dt.danger.main : dt.text.muted, fontWeight: isOverdue ? 600 : 400, fontFeatureSettings: '"tnum"' }}>
+                              {formatDate(task.dueDate)}
+                            </Typography>
+                          )}
+                          {isOverdue && (
+                            <Chip label="逾期" color="error" size="small" sx={{ fontWeight: 700, height: 22 }} />
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </Box>
+            );
+          }
+
+          return (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>标题</TableCell>
+                    <TableCell>状态</TableCell>
+                    <TableCell>截止时间</TableCell>
+                    <TableCell>创建时间</TableCell>
+                    <TableCell align="right">操作</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {filteredTasks.map((task) => {
+                    const isOverdue = task.dueDate && task.status !== 'DONE' && task.status !== 'CANCELLED' && new Date(task.dueDate) < new Date(new Date().toDateString());
+                    return (
+                      <TableRow key={task.id} sx={{ bgcolor: isOverdue ? alpha(dt.danger.main, 0.06) : 'transparent' }}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{task.title}</Typography>
+                          {task.dod && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
+                              {task.dod}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <TaskStatusChip status={task.status} />
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontFeatureSettings: '"tnum"', color: isOverdue ? dt.danger.main : dt.text.secondary, fontWeight: isOverdue ? 600 : 400 }}>
+                              {task.dueDate ? formatDate(task.dueDate) : '-'}
+                            </Typography>
+                            {isOverdue && (
+                              <Chip label="逾期" color="error" size="small" sx={{ fontWeight: 700, height: 22 }} />
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>{formatDate(task.createdAt)}</TableCell>
+                        <TableCell align="right">
+                          <IconButton
+                            size="small"
+                            onClick={() => router.push(`/todo/${task.id}`)}
+                            color="primary"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          );
+        })()}
+      </Paper>
+
+      {/* OKR 目标 */}
+      <Paper sx={{ p: 3, mb: 3, mt: 3, bgcolor: dt.bg.elevated, border: `1px solid ${dt.border.default}`, borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            OKR 目标
+          </Typography>
+          <Button
+            size="small"
+            onClick={() => router.push('/okr')}
+            sx={{ textTransform: 'none' }}
+          >
+            查看全部
+          </Button>
+        </Box>
+        {okrData.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            暂无 OKR 目标
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {okrData.map((obj: any) => (
+              <Card
+                key={obj.id}
+                sx={{
+                  bgcolor: dt.bg.elevated,
+                  border: `1px solid ${dt.border.default}`,
+                  borderRadius: 2,
+                  cursor: 'pointer',
+                  '&:hover': { borderColor: dt.border.hover },
+                }}
+                elevation={0}
+                onClick={() => router.push(`/okr/${obj.id}`)}
+              >
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      {obj.title}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Chip label={obj.periodLabel} size="small" variant="outlined" />
+                      <Chip
+                        label={obj.status}
+                        size="small"
+                        color={obj.status === 'ACTIVE' ? 'primary' : obj.status === 'COMPLETED' ? 'success' : 'default'}
+                      />
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={obj.progress || 0}
+                      sx={{
+                        flex: 1,
+                        height: 6,
+                        borderRadius: 3,
+                        bgcolor: dt.bg.deep,
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 3,
+                          bgcolor: (obj.progress || 0) >= 70 ? '#00B894' : (obj.progress || 0) >= 30 ? '#FDCB6E' : '#E17055',
+                        },
+                      }}
+                    />
+                    <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 35 }}>
+                      {obj.progress || 0}%
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {obj.keyResults?.length || 0} 个关键结果
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
         )}
       </Paper>
 
