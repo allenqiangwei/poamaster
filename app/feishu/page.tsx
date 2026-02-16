@@ -126,6 +126,14 @@ export default function FeishuPage() {
           <Button
             variant="outlined"
             size="small"
+            startIcon={<AlertIcon />}
+            onClick={() => router.push('/feishu/alerts')}
+          >
+            预警设置
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
             startIcon={<SettingsIcon />}
             onClick={() => router.push('/feishu/settings')}
           >
@@ -206,21 +214,6 @@ export default function FeishuPage() {
               <Typography variant="h6">团队脉搏</Typography>
               <Typography variant="body2" color="text.secondary">
                 从群聊中提取运营信号，查看团队动态和每日摘要
-              </Typography>
-            </Box>
-          </CardContent>
-        </CardActionArea>
-      </Card>
-
-      {/* Alert Settings Entry */}
-      <Card sx={{ mb: 4 }}>
-        <CardActionArea onClick={() => router.push('/feishu/alerts')}>
-          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <AlertIcon color="warning" sx={{ fontSize: 40 }} />
-            <Box>
-              <Typography variant="h6">预警设置</Typography>
-              <Typography variant="body2" color="text.secondary">
-                管理预警关键词规则、黑白名单、通知偏好和阈值配置
               </Typography>
             </Box>
           </CardContent>
