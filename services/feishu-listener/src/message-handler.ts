@@ -171,6 +171,7 @@ export async function handleMessage(msg: DecodedMessage): Promise<void> {
     detectSignals({
       messageId: msg.messageId,
       chatId: msg.chatId,
+      senderId: msg.senderId,
       senderName: displayName,
       content: msg.content,
       chatType: msg.chatType,
