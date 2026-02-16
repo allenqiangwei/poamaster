@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 // GET /api/sentiment/overview — Dashboard overview stats
 export async function GET(request: NextRequest) {
@@ -17,12 +19,27 @@ export async function GET(request: NextRequest) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // Global stats
-    const [gameCount, todayReviews, todayMentions, pendingAlerts] = await Promise.all([
+    // Global stats + last collection time per platform
+    const [gameCount, todayReviews, todayMentions, pendingAlerts, lastAppStore, lastGooglePlay, lastX] = await Promise.all([
       prisma.monitoredGame.count({ where: { isActive: true } }),
       prisma.sentimentReview.count({ where: { collectedAt: { gte: todayStart } } }),
       prisma.sentimentMention.count({ where: { collectedAt: { gte: todayStart } } }),
       prisma.sentimentAlert.count({ where: { isRead: false } }),
+      prisma.sentimentReview.findFirst({
+        where: { platform: 'APP_STORE' },
+        orderBy: { collectedAt: 'desc' },
+        select: { collectedAt: true },
+      }),
+      prisma.sentimentReview.findFirst({
+        where: { platform: 'GOOGLE_PLAY' },
+        orderBy: { collectedAt: 'desc' },
+        select: { collectedAt: true },
+      }),
+      prisma.sentimentMention.findFirst({
+        where: { platform: 'X' },
+        orderBy: { collectedAt: 'desc' },
+        select: { collectedAt: true },
+      }),
     ]);
 
     // Per-game stats from last 7 days
@@ -90,13 +107,46 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // Next scheduled collections
+    const now = new Date();
+    // Reviews: cron 0 6 * * * (daily 6:00 AM)
+    const nextReview = new Date(now);
+    nextReview.setHours(6, 0, 0, 0);
+    if (nextReview <= now) nextReview.setDate(nextReview.getDate() + 1);
+    // Tweets: cron 0 */4 * * * (every 4 hours)
+    const nextTweet = new Date(now);
+    nextTweet.setMinutes(0, 0, 0);
+    nextTweet.setHours(Math.ceil((now.getHours() + 1) / 4) * 4);
+    if (nextTweet <= now) nextTweet.setHours(nextTweet.getHours() + 4);
+
+    // Check if sentiment-collector service is running
+    let serviceRunning = false;
+    const pidFile = join(process.cwd(), 'services/sentiment-collector/.pid');
+    if (existsSync(pidFile)) {
+      try {
+        const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
+        process.kill(pid, 0);
+        serviceRunning = true;
+      } catch {}
+    }
+
     return NextResponse.json({
       success: true,
+      serviceRunning,
       stats: {
         gameCount,
         todayReviews,
         todayMentions,
         pendingAlerts,
+      },
+      lastCollected: {
+        APP_STORE: lastAppStore?.collectedAt ?? null,
+        GOOGLE_PLAY: lastGooglePlay?.collectedAt ?? null,
+        X: lastX?.collectedAt ?? null,
+      },
+      nextCollection: {
+        reviews: nextReview.toISOString(),
+        tweets: nextTweet.toISOString(),
       },
       gameStats,
     });

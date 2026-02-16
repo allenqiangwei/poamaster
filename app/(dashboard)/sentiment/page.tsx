@@ -24,6 +24,8 @@ import StarIcon from '@mui/icons-material/Star';
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useRouter } from 'next/navigation';
 import { designTokens as dt } from '@/lib/theme';
 import {
@@ -68,6 +70,7 @@ interface TrendItem {
   avgRating: number | null;
   appStore: number;
   googlePlay: number;
+  x: number;
 }
 
 interface PlatformSummary {
@@ -75,6 +78,7 @@ interface PlatformSummary {
   gameName: string;
   appStore: number;
   googlePlay: number;
+  x: number;
   total: number;
 }
 
@@ -100,9 +104,14 @@ export default function SentimentOverviewPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [gameStats, setGameStats] = useState<GameStat[]>([]);
+  const [lastCollected, setLastCollected] = useState<Record<string, string | null>>({});
+  const [nextCollection, setNextCollection] = useState<{ reviews: string; tweets: string } | null>(null);
+  const [countdown, setCountdown] = useState<{ reviews: string; tweets: string }>({ reviews: '', tweets: '' });
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState<string | null>(null);
+  const [collecting, setCollecting] = useState(false);
+  const [serviceRunning, setServiceRunning] = useState(false);
 
   // Chart state
   const [days, setDays] = useState<number>(7);
@@ -122,12 +131,31 @@ export default function SentimentOverviewPage() {
         if (data.success) {
           setStats(data.stats);
           setGameStats(data.gameStats);
+          if (data.lastCollected) setLastCollected(data.lastCollected);
+          if (data.nextCollection) setNextCollection(data.nextCollection);
+          if (data.serviceRunning !== undefined) setServiceRunning(data.serviceRunning);
         }
       } catch { /* silently fail */ }
       finally { setLoading(false); }
     };
     fetchOverview();
   }, []);
+
+  // Live countdown to next collection
+  useEffect(() => {
+    if (!nextCollection) return;
+    const fmt = (iso: string) => {
+      const diff = new Date(iso).getTime() - Date.now();
+      if (diff <= 0) return '即将采集';
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      return `${h}小时${m}分钟`;
+    };
+    const tick = () => setCountdown({ reviews: fmt(nextCollection.reviews), tweets: fmt(nextCollection.tweets) });
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [nextCollection]);
 
   // Fetch trend data
   useEffect(() => {
@@ -199,7 +227,7 @@ export default function SentimentOverviewPage() {
         ]);
         const overData = await overRes.json();
         const trendDataNew = await trendRes.json();
-        if (overData.success) { setStats(overData.stats); setGameStats(overData.gameStats); }
+        if (overData.success) { setStats(overData.stats); setGameStats(overData.gameStats); if (overData.lastCollected) setLastCollected(overData.lastCollected); if (overData.nextCollection) setNextCollection(overData.nextCollection); if (overData.serviceRunning !== undefined) setServiceRunning(overData.serviceRunning); }
         if (trendDataNew.success) { setTrendData(trendDataNew.trendData); setPlatformSummary(trendDataNew.platformSummary); }
       } else {
         setAnalyzeResult(`分析失败: ${data.error}`);
@@ -208,6 +236,24 @@ export default function SentimentOverviewPage() {
       setAnalyzeResult(`分析出错: ${e.message}`);
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleCollect = async () => {
+    setCollecting(true);
+    setAnalyzeResult(null);
+    try {
+      const res = await fetch('/api/sentiment/collect', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setAnalyzeResult('已触发立即采集，数据将在几分钟内更新');
+      } else {
+        setAnalyzeResult(data.error || '触发采集失败');
+      }
+    } catch {
+      setAnalyzeResult('请求失败，请确认采集服务已启动');
+    } finally {
+      setCollecting(false);
     }
   };
 
@@ -256,13 +302,55 @@ export default function SentimentOverviewPage() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ color: dt.text.primary, fontWeight: 700 }}>
-          舆情监控
-        </Typography>
-        <Stack direction="row" spacing={1}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 3, flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 0 } }}>
+        <Box>
+          <Typography variant="h4" sx={{ color: dt.text.primary, fontWeight: 700 }}>
+            舆情监控
+          </Typography>
+          {/* Last fetch time + countdown inline */}
+          <Stack direction="row" spacing={1.5} sx={{ mt: 0.5, flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
+            {(() => {
+              const times = [
+                lastCollected.APP_STORE && `AppStore ${new Date(lastCollected.APP_STORE).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+                lastCollected.GOOGLE_PLAY && `GP ${new Date(lastCollected.GOOGLE_PLAY).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+                lastCollected.X && `X ${new Date(lastCollected.X).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+              ].filter(Boolean);
+              if (times.length === 0) return null;
+              return (
+                <Typography variant="caption" sx={{ color: dt.text.muted }}>
+                  <AccessTimeIcon sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.25 }} />
+                  上次采集: {times.join(' · ')}
+                </Typography>
+              );
+            })()}
+            {countdown.reviews && (
+              <Typography variant="caption" sx={{ color: dt.accent.main, fontWeight: 600 }}>
+                评论: {countdown.reviews}
+              </Typography>
+            )}
+            {countdown.tweets && (
+              <Typography variant="caption" sx={{ color: dt.purple.main, fontWeight: 600 }}>
+                X: {countdown.tweets}
+              </Typography>
+            )}
+            {!serviceRunning && (
+              <Chip label="服务未运行" size="small" color="error" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+            )}
+          </Stack>
+        </Box>
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
           <Button
             variant="contained"
+            size="small"
+            startIcon={collecting ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+            onClick={handleCollect}
+            disabled={collecting}
+          >
+            {collecting ? '触发中...' : '立即获取'}
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
             startIcon={analyzing ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
             onClick={handleAnalyze}
             disabled={analyzing}
@@ -271,6 +359,7 @@ export default function SentimentOverviewPage() {
           </Button>
           <Button
             variant="outlined"
+            size="small"
             startIcon={<SettingsIcon />}
             onClick={() => router.push('/sentiment/games')}
           >
@@ -351,6 +440,7 @@ export default function SentimentOverviewPage() {
                       <ToggleButton value="all" sx={{ px: 2 }}>全部</ToggleButton>
                       <ToggleButton value="APP_STORE" sx={{ px: 2 }}>App Store</ToggleButton>
                       <ToggleButton value="GOOGLE_PLAY" sx={{ px: 2 }}>Google Play</ToggleButton>
+                      <ToggleButton value="X" sx={{ px: 2 }}>X</ToggleButton>
                     </ToggleButtonGroup>
                   </Box>
                 </Stack>
@@ -506,6 +596,13 @@ export default function SentimentOverviewPage() {
                       dataKey="googlePlay"
                       name="Google Play"
                       fill={dt.success.main}
+                      stackId="platform"
+                      radius={[0, 0, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="x"
+                      name="X"
+                      fill={dt.purple.main}
                       stackId="platform"
                       radius={[0, 4, 4, 0]}
                     />

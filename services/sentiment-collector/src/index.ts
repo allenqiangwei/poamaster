@@ -47,7 +47,7 @@ writeFileSync(PID_FILE, String(process.pid));
 // Shared Prisma client
 export const prisma = new PrismaClient();
 
-// Register collection job
+// Register collection jobs
 registerJob('collect-reviews', '0 6 * * *', async () => {
   const { collectAllReviews } = await import('./collectors/appstore.js');
   const { collectAllGooglePlayReviews } = await import('./collectors/googleplay.js');
@@ -56,13 +56,38 @@ registerJob('collect-reviews', '0 6 * * *', async () => {
   await collectAllGooglePlayReviews();
 });
 
+registerJob('collect-tweets', '0 */4 * * *', async () => {
+  const { collectAllTweets } = await import('./collectors/twitter.js');
+  await collectAllTweets();
+});
+
 // Start scheduler
 startScheduler();
 
-// If --run-now flag is passed, run collection immediately
+// If --run-now flags are passed, run collection immediately
 if (process.argv.includes('--run-now')) {
   runNow('collect-reviews');
 }
+if (process.argv.includes('--run-now-tweets')) {
+  runNow('collect-tweets');
+}
+
+// SIGUSR1 = trigger immediate collection from web API
+let collecting = false;
+process.on('SIGUSR1', async () => {
+  if (collecting) {
+    logger.info('[SIGUSR1] Collection already in progress, ignoring');
+    return;
+  }
+  collecting = true;
+  logger.info('[SIGUSR1] Triggered immediate collection');
+  try {
+    await runNow('collect-reviews');
+    await runNow('collect-tweets');
+  } finally {
+    collecting = false;
+  }
+});
 
 logger.info(`Sentiment Collector running. PID: ${process.pid}`);
 logger.info('Press Ctrl+C to stop.');
