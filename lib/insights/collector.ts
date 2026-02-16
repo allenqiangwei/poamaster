@@ -55,6 +55,13 @@ export interface DailyData {
     signalCount: number;
     status: 'healthy' | 'warning' | 'critical';
   }>;
+  okrAtRisk?: Array<{
+    krTitle: string;
+    objectiveTitle: string;
+    ownerName: string;
+    progress: number;
+    objectiveId: string;
+  }>;
   competitor?: CompetitorDailyData;
 }
 
@@ -83,6 +90,7 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
     decisionStatusCounts,
     completedDecisions,
     tasksByAssignee,
+    allActiveKRs,
   ] = await Promise.all([
     // Overdue tasks
     prisma.task.findMany({
@@ -221,7 +229,25 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
       _count: true,
       where: { assigneeId: { not: null } },
     }),
+
+    // OKR: at-risk key results (progress < expected based on time elapsed in period)
+    prisma.keyResult.findMany({
+      where: {
+        objective: { status: 'ACTIVE' },
+        targetValue: { gt: 0 },
+      },
+      include: {
+        owner: { select: { name: true } },
+        objective: { select: { id: true, title: true, periodLabel: true } },
+      },
+    }),
   ]);
+
+  // Compute at-risk KRs (less than 50% progress)
+  const atRiskKRs = allActiveKRs.filter(kr => {
+    const progress = kr.currentValue / kr.targetValue;
+    return progress < 0.5;
+  }).slice(0, 5);
 
   // --- Decision stats ---
   const decisionByStatus: Record<string, number> = {};
@@ -352,6 +378,13 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
         reviewDate: d.reviewDate?.toISOString() || '',
       })),
     },
+    okrAtRisk: atRiskKRs.map(kr => ({
+      krTitle: kr.title,
+      objectiveTitle: kr.objective.title,
+      ownerName: kr.owner?.name || '未指定',
+      progress: Math.round((kr.currentValue / kr.targetValue) * 100),
+      objectiveId: kr.objective.id,
+    })),
     sentiment: (() => {
       const total = sentimentReviews.length;
       const positive = sentimentReviews.filter(r => r.sentimentLabel === 'POSITIVE').length;

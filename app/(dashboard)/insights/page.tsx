@@ -43,6 +43,7 @@ import {
   NotificationImportant as NotificationImportantIcon,
   Gavel as GavelIcon,
   PriorityHigh as PriorityHighIcon,
+  Flag as FlagIcon,
 } from '@mui/icons-material';
 
 interface DailyData {
@@ -100,6 +101,13 @@ interface DailyData {
     signalCount: number;
     status: 'healthy' | 'warning' | 'critical';
   }>;
+  okrAtRisk?: Array<{
+    krTitle: string;
+    objectiveTitle: string;
+    ownerName: string;
+    progress: number;
+    objectiveId: string;
+  }>;
 }
 
 interface SuggestedTopic {
@@ -111,7 +119,7 @@ interface SuggestedTopic {
 
 type PriorityItem = {
   id: string;
-  type: 'task' | 'signal' | 'decision' | 'overdueDecision';
+  type: 'task' | 'signal' | 'decision' | 'overdueDecision' | 'okrRisk';
   title: string;
   detail: string;
   href: string;
@@ -763,6 +771,13 @@ export default function InsightsPage() {
                   detail: `${d.madeBy} · 复盘日期 ${d.reviewDate ? new Date(d.reviewDate).toLocaleDateString('zh-CN') : ''}`,
                   href: `/decisions/${d.id}`,
                 })),
+                ...(data?.okrAtRisk || []).map(kr => ({
+                  id: kr.objectiveId,
+                  type: 'okrRisk' as const,
+                  title: `[OKR风险] ${kr.krTitle}`,
+                  detail: `${kr.ownerName} · 进度 ${kr.progress}%`,
+                  href: `/okr/${kr.objectiveId}`,
+                })),
               ];
 
               const priorityConfig = {
@@ -789,6 +804,12 @@ export default function InsightsPage() {
                   label: '逾期决策',
                   chipColor: COLORS.danger,
                   chipBg: `${COLORS.danger}18`,
+                },
+                okrRisk: {
+                  icon: <FlagIcon sx={{ fontSize: 18 }} />,
+                  label: 'OKR',
+                  chipColor: '#6C5CE7',
+                  chipBg: '#6C5CE718',
                 },
               };
 
