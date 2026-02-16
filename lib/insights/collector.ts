@@ -35,6 +35,26 @@ export interface DailyData {
     unresolvedSignals: Array<{ id: string; type: string; severity: string; title: string; chatName: string }>;
     pendingDecisions: Array<{ id: string; title: string; madeBy: string; madeAt: string }>;
   };
+  decisionStats?: {
+    total: number;
+    completed: number;
+    executing: number;
+    pending: number;
+    revised: number;
+    executionRate: number;
+    avgClosureDays: number | null;
+  };
+  projectHealth?: Array<{
+    name: string;
+    totalTasks: number;
+    completedTasks: number;
+    overdueTasks: number;
+    completionRate: number;
+    overdueRate: number;
+    signalCount: number;
+    status: 'healthy' | 'warning' | 'critical';
+  }>;
+  competitor?: CompetitorDailyData;
 }
 
 export async function collectDailyData(since?: Date): Promise<DailyData> {
@@ -58,6 +78,9 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
     priorityOverdue,
     prioritySignals,
     priorityDecisions,
+    decisionStatusCounts,
+    completedDecisions,
+    tasksByAssignee,
   ] = await Promise.all([
     // Overdue tasks
     prisma.task.findMany({
@@ -167,7 +190,86 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
       take: 5,
       orderBy: { madeAt: 'desc' },
     }),
+
+    // Decision stats
+    prisma.decision.groupBy({
+      by: ['status'],
+      _count: true,
+    }),
+
+    // Decision closure time
+    prisma.decision.findMany({
+      where: { status: 'COMPLETED' },
+      select: { madeAt: true, updatedAt: true },
+    }),
+
+    // Tasks grouped by assignee for project health
+    prisma.task.groupBy({
+      by: ['assigneeId'],
+      _count: true,
+      where: { assigneeId: { not: null } },
+    }),
   ]);
+
+  // --- Decision stats ---
+  const decisionByStatus: Record<string, number> = {};
+  for (const g of decisionStatusCounts) {
+    decisionByStatus[g.status] = g._count;
+  }
+  const dTotal = Object.values(decisionByStatus).reduce((a, b) => a + b, 0);
+  const dCompleted = decisionByStatus['COMPLETED'] || 0;
+  const dRevised = decisionByStatus['REVISED'] || 0;
+  const dDenominator = dTotal - dRevised;
+  const executionRate = dDenominator > 0 ? Math.round((dCompleted / dDenominator) * 100) : 0;
+
+  let avgClosureDays: number | null = null;
+  if (completedDecisions.length > 0) {
+    const totalDays = completedDecisions.reduce((sum: number, d: any) => {
+      return sum + (d.updatedAt.getTime() - d.madeAt.getTime()) / (1000 * 60 * 60 * 24);
+    }, 0);
+    avgClosureDays = Math.round((totalDays / completedDecisions.length) * 10) / 10;
+  }
+
+  // --- Project health ---
+  const assigneeIds = tasksByAssignee.map((t: any) => t.assigneeId).filter(Boolean) as string[];
+  const assigneeNames = assigneeIds.length > 0
+    ? await prisma.assignee.findMany({
+        where: { id: { in: assigneeIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const assigneeNameMap = new Map(assigneeNames.map((a: any) => [a.id, a.name]));
+
+  const allAssigneeTasks = assigneeIds.length > 0
+    ? await prisma.task.findMany({
+        where: { assigneeId: { in: assigneeIds } },
+        select: { assigneeId: true, status: true, dueDate: true },
+      })
+    : [];
+
+  const projectHealthData = assigneeIds.map(aid => {
+    const tasks = allAssigneeTasks.filter(t => t.assigneeId === aid);
+    const total = tasks.length;
+    const completed = tasks.filter(t => t.status === 'DONE').length;
+    const overdue = tasks.filter(t => t.status !== 'DONE' && t.dueDate && new Date(t.dueDate) < now).length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const overdueRate = total > 0 ? Math.round((overdue / total) * 100) : 0;
+
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (overdueRate > 30) status = 'critical';
+    else if (overdueRate > 10) status = 'warning';
+
+    return {
+      name: assigneeNameMap.get(aid) || '未知',
+      totalTasks: total,
+      completedTasks: completed,
+      overdueTasks: overdue,
+      completionRate,
+      overdueRate,
+      signalCount: 0,
+      status,
+    };
+  });
 
   // Resolve chat names for top chats
   const chatIds = topChatsRaw.map(c => c.chatId);
@@ -269,5 +371,114 @@ export async function collectDailyData(since?: Date): Promise<DailyData> {
 
       return { totalReviews: total, positive, neutral, negative, topIssues, games };
     })(),
+    decisionStats: {
+      total: dTotal,
+      completed: dCompleted,
+      executing: decisionByStatus['EXECUTING'] || 0,
+      pending: decisionByStatus['PENDING'] || 0,
+      revised: dRevised,
+      executionRate,
+      avgClosureDays,
+    },
+    projectHealth: projectHealthData,
   };
+}
+
+export interface CompetitorDailyData {
+  competitors: Array<{
+    name: string;
+    appSnapshots: Array<{ platform: string; rating: number | null; version: string | null; releaseNotes: string | null }>;
+    reviewSummary: { total: number; avgRating: number | null; topIssues: string[] };
+    webChanges: Array<{ url: string; changeType: string; summary: string | null }>;
+    news: Array<{ title: string; source: string; summary: string | null }>;
+  }>;
+  alerts: Array<{ competitorName: string; alertType: string; severity: string; title: string; summary: string }>;
+}
+
+export async function collectCompetitorData(since?: Date): Promise<CompetitorDailyData> {
+  const from = since || new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const competitors = await prisma.competitor.findMany({
+    where: { enabled: true },
+    select: { id: true, name: true },
+  });
+
+  const result: CompetitorDailyData = { competitors: [], alerts: [] };
+
+  for (const comp of competitors) {
+    const [snapshots, reviews, webChanges, news] = await Promise.all([
+      prisma.competitorAppSnapshot.findMany({
+        where: { competitorId: comp.id, createdAt: { gte: from } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.competitorReview.findMany({
+        where: { competitorId: comp.id, createdAt: { gte: from } },
+        select: { rating: true, tags: true },
+      }),
+      prisma.competitorWebChange.findMany({
+        where: { competitorId: comp.id, createdAt: { gte: from }, changeType: { not: 'baseline' } },
+      }),
+      prisma.competitorNews.findMany({
+        where: { competitorId: comp.id, createdAt: { gte: from } },
+      }),
+    ]);
+
+    // Aggregate review issues
+    const issueMap = new Map<string, number>();
+    for (const r of reviews) {
+      for (const tag of (r.tags as string[] || [])) {
+        issueMap.set(tag, (issueMap.get(tag) || 0) + 1);
+      }
+    }
+    const topIssues = Array.from(issueMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag]) => tag);
+
+    const avgRating = reviews.length > 0
+      ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) * 10) / 10
+      : null;
+
+    // Only include competitor if there's any data
+    if (snapshots.length > 0 || reviews.length > 0 || webChanges.length > 0 || news.length > 0) {
+      result.competitors.push({
+        name: comp.name,
+        appSnapshots: snapshots.map(s => ({
+          platform: s.platform,
+          rating: s.rating,
+          version: s.version,
+          releaseNotes: s.releaseNotes,
+        })),
+        reviewSummary: { total: reviews.length, avgRating, topIssues },
+        webChanges: webChanges.map(w => ({
+          url: w.url,
+          changeType: w.changeType,
+          summary: w.summary,
+        })),
+        news: news.map(n => ({
+          title: n.title,
+          source: n.source,
+          summary: n.summary,
+        })),
+      });
+    }
+  }
+
+  // Collect recent alerts
+  const alerts = await prisma.competitorAlert.findMany({
+    where: { createdAt: { gte: from } },
+    include: { competitor: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  });
+
+  result.alerts = alerts.map(a => ({
+    competitorName: a.competitor.name,
+    alertType: a.alertType,
+    severity: a.severity,
+    title: a.title,
+    summary: a.summary,
+  }));
+
+  return result;
 }
