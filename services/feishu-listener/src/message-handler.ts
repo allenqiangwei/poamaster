@@ -11,8 +11,9 @@ import {
   getNameByNumericId,
 } from './open-api.js';
 import { detectSignals } from './signal-detector.js';
-import { processMessage } from './bot-agent.js';
+import { processMessage, isBotAllowed } from './bot-agent.js';
 import { sendReply } from './bot-reply.js';
+import { callClaude } from './claude-bridge.js';
 
 let prisma: PrismaClient;
 
@@ -191,10 +192,47 @@ export async function handleMessage(msg: DecodedMessage): Promise<void> {
         .replace(new RegExp(`@${botName}\\s*`, 'gi'), '')
         .replace(/@POA\s*/gi, '')
         .trim();
+
       if (cleanContent) {
-        processMessage(msg.chatId, cleanContent)
-          .then(reply => sendReply(msg.chatId, reply))
-          .catch(err => logger.error(`[Bot] Error: ${err.message}`));
+        const useClaudeCli = await isBotAllowed(msg.senderId, displayName);
+
+        if (useClaudeCli) {
+          // Claude CLI — async with "processing" reply first
+          sendReply(msg.chatId, '🤔 正在处理，请稍候...')
+            .catch(err => logger.error(`[Bot] Ack send failed: ${err.message}`));
+
+          // Get or create conversation for session resume
+          let conv = await prisma.botConversation.findUnique({ where: { chatId: msg.chatId } });
+          if (!conv) {
+            conv = await prisma.botConversation.create({
+              data: { chatId: msg.chatId, source: 'feishu', lastActiveAt: new Date() },
+            });
+          }
+
+          callClaude(cleanContent, conv.claudeSessionId)
+            .then(async (response) => {
+              await sendReply(msg.chatId, response.result || '处理完成，但没有返回结果。');
+              // Save session ID for resume
+              await prisma.botConversation.update({
+                where: { chatId: msg.chatId },
+                data: {
+                  claudeSessionId: response.sessionId,
+                  lastActiveAt: new Date(),
+                },
+              });
+              logger.info(`[Bot/Claude] Reply sent to ${msg.chatId}, cost: $${response.cost.toFixed(4)}`);
+            })
+            .catch(err => {
+              logger.error(`[Bot/Claude] Error: ${err.message}`);
+              sendReply(msg.chatId, `抱歉，处理失败: ${err.message}`)
+                .catch(() => {});
+            });
+        } else {
+          // Fallback to OpenAI for non-whitelisted users
+          processMessage(msg.chatId, cleanContent)
+            .then(reply => sendReply(msg.chatId, reply))
+            .catch(err => logger.error(`[Bot/OpenAI] Error: ${err.message}`));
+        }
       }
     }
 

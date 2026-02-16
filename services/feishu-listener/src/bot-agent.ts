@@ -17,6 +17,19 @@ export function initBotAgent(prismaClient: PrismaClient) {
   prisma = prismaClient;
 }
 
+/** Check if a sender is allowed to use the Claude-powered bot */
+export async function isBotAllowed(senderId: string, senderName: string): Promise<boolean> {
+  if (!prisma) return false;
+  try {
+    const cfg = await prisma.config.findUnique({ where: { key: 'bot.allowedUsers' } });
+    if (!cfg?.value) return true; // If no whitelist configured, allow all (fallback to OpenAI)
+    const allowed = cfg.value.split(',').map((s: string) => s.trim().toLowerCase());
+    return allowed.includes(senderName.toLowerCase()) || allowed.includes(senderId);
+  } catch {
+    return false;
+  }
+}
+
 const MAX_HISTORY = 20;
 
 // ---------------------------------------------------------------------------
