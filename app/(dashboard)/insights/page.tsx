@@ -80,6 +80,25 @@ interface DailyData {
     unresolvedSignals: Array<{ id: string; type: string; severity: string; title: string; chatName: string }>;
     pendingDecisions: Array<{ id: string; title: string; madeBy: string; madeAt: string }>;
   };
+  decisionStats?: {
+    total: number;
+    completed: number;
+    executing: number;
+    pending: number;
+    revised: number;
+    executionRate: number;
+    avgClosureDays: number | null;
+  };
+  projectHealth?: Array<{
+    name: string;
+    totalTasks: number;
+    completedTasks: number;
+    overdueTasks: number;
+    completionRate: number;
+    overdueRate: number;
+    signalCount: number;
+    status: 'healthy' | 'warning' | 'critical';
+  }>;
 }
 
 interface SuggestedTopic {
@@ -91,7 +110,7 @@ interface SuggestedTopic {
 
 type PriorityItem = {
   id: string;
-  type: 'task' | 'signal' | 'decision';
+  type: 'task' | 'signal' | 'decision' | 'overdueDecision';
   title: string;
   detail: string;
   href: string;
@@ -528,7 +547,7 @@ export default function InsightsPage() {
                 </Typography>
               </Box>
 
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button
                   size="small"
                   startIcon={<ExploreIcon />}
@@ -564,6 +583,24 @@ export default function InsightsPage() {
                   }}
                 >
                   话题管理
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => router.push('/insights/competitors')}
+                  sx={{
+                    color: COLORS.textSecondary,
+                    border: `1px solid ${COLORS.cardBorder}`,
+                    borderRadius: '12px',
+                    textTransform: 'none',
+                    '&:hover': {
+                      color: COLORS.accent,
+                      borderColor: dt.accent.border,
+                      bgcolor: dt.accent.subtle,
+                    },
+                  }}
+                >
+                  竞品管理
                 </Button>
                 <Tooltip title="重新生成简报" arrow>
                   <span>
@@ -681,6 +718,17 @@ export default function InsightsPage() {
                   delay={300}
                 />
               </Grid>
+              {data.decisionStats && data.decisionStats.total > 0 && (
+                <Grid size={{ xs: 6, md: 3 }}>
+                  <StatCard
+                    icon={<GavelIcon fontSize="small" />}
+                    label="决策执行率"
+                    value={data.decisionStats.executionRate}
+                    color={data.decisionStats.executionRate >= 70 ? COLORS.success : COLORS.warning}
+                    delay={400}
+                  />
+                </Grid>
+              )}
             </Grid>
 
             {/* Priority Queue */}
@@ -1167,6 +1215,99 @@ export default function InsightsPage() {
                                 emptyText="暂无问题数据"
                               />
                             </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Fade>
+                  )}
+
+                  {/* Project Health */}
+                  {data.projectHealth && data.projectHealth.length > 0 && (
+                    <Fade in timeout={1500}>
+                      <Card sx={CARD_STYLE} elevation={0}>
+                        <CardContent sx={{ p: 2.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                            <TrendingIcon sx={{ color: COLORS.accent, fontSize: 18 }} />
+                            <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
+                              团队健康度
+                            </Typography>
+                          </Box>
+                          {data.projectHealth.map((p, i) => (
+                            <Box key={i} sx={{ py: 0.75 }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="body2" sx={{ color: COLORS.textSecondary, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {p.name}
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                  <Typography variant="body2" sx={{ color: COLORS.textPrimary, fontWeight: 600, fontFeatureSettings: '"tnum"' }}>
+                                    {p.completionRate}%
+                                  </Typography>
+                                  <DotIcon sx={{
+                                    fontSize: 10,
+                                    color: p.status === 'critical' ? COLORS.danger : p.status === 'warning' ? COLORS.warning : COLORS.success,
+                                  }} />
+                                </Box>
+                              </Box>
+                              <LinearProgress
+                                variant="determinate"
+                                value={p.completionRate}
+                                sx={{
+                                  height: 3,
+                                  borderRadius: 2,
+                                  bgcolor: dt.bg.deep,
+                                  '& .MuiLinearProgress-bar': {
+                                    borderRadius: 2,
+                                    bgcolor: p.status === 'critical' ? COLORS.danger : p.status === 'warning' ? COLORS.warning : COLORS.success,
+                                  },
+                                }}
+                              />
+                            </Box>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    </Fade>
+                  )}
+
+                  {/* Decision Stats */}
+                  {data.decisionStats && data.decisionStats.total > 0 && (
+                    <Fade in timeout={1600}>
+                      <Card
+                        sx={{
+                          ...CARD_STYLE,
+                          cursor: 'pointer',
+                          '&:hover': { ...CARD_STYLE['&:hover'] },
+                        }}
+                        elevation={0}
+                        onClick={() => router.push('/decisions')}
+                      >
+                        <CardContent sx={{ p: 2.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                            <GavelIcon sx={{ color: COLORS.accent, fontSize: 18 }} />
+                            <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
+                              决策追踪
+                            </Typography>
+                            <Chip
+                              label={`${data.decisionStats.executionRate}%`}
+                              size="small"
+                              sx={{
+                                ml: 'auto',
+                                bgcolor: data.decisionStats.executionRate >= 70 ? `${COLORS.success}18` : `${COLORS.warning}18`,
+                                color: data.decisionStats.executionRate >= 70 ? COLORS.success : COLORS.warning,
+                                fontWeight: 700,
+                                fontSize: '0.7rem',
+                                height: 22,
+                              }}
+                            />
+                          </Box>
+                          <MiniStatRow icon={<CheckIcon sx={{ fontSize: 16 }} />} label="已完成" value={data.decisionStats.completed} color={COLORS.success} />
+                          <MiniStatRow icon={<TrendingIcon sx={{ fontSize: 16 }} />} label="执行中" value={data.decisionStats.executing} color={COLORS.accent} />
+                          <MiniStatRow icon={<WarningIcon sx={{ fontSize: 16 }} />} label="待执行" value={data.decisionStats.pending} color={COLORS.warning} />
+                          {data.decisionStats.avgClosureDays !== null && (
+                            <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${COLORS.cardBorder}` }}>
+                              <Typography variant="caption" sx={{ color: COLORS.textMuted }}>
+                                平均闭环: {data.decisionStats.avgClosureDays} 天
+                              </Typography>
+                            </Box>
                           )}
                         </CardContent>
                       </Card>
