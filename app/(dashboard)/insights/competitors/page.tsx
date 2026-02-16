@@ -24,7 +24,6 @@ interface Competitor {
   googlePlayId: string | null;
   websiteUrl: string | null;
   monitorUrls: Array<{ url: string; label: string }>;
-  rssFeeds: Array<{ url: string; label: string }>;
   keywords: string[];
   enabled: boolean;
   createdAt: string;
@@ -45,7 +44,7 @@ export default function CompetitorManagementPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '', company: '', appStoreId: '', googlePlayId: '',
-    websiteUrl: '', monitorUrls: '', rssFeeds: '', keywords: '',
+    websiteUrl: '', monitorUrls: '', keywords: '',
   });
 
   const load = async () => {
@@ -107,7 +106,7 @@ export default function CompetitorManagementPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: '', company: '', appStoreId: '', googlePlayId: '', websiteUrl: '', monitorUrls: '', rssFeeds: '', keywords: '' });
+    setForm({ name: '', company: '', appStoreId: '', googlePlayId: '', websiteUrl: '', monitorUrls: '', keywords: '' });
     setDialogOpen(true);
   };
 
@@ -120,7 +119,6 @@ export default function CompetitorManagementPage() {
       googlePlayId: c.googlePlayId || '',
       websiteUrl: c.websiteUrl || '',
       monitorUrls: (c.monitorUrls || []).map(u => `${u.label}|${u.url}`).join('\n'),
-      rssFeeds: (c.rssFeeds || []).map(f => `${f.label}|${f.url}`).join('\n'),
       keywords: (c.keywords || []).join(', '),
     });
     setDialogOpen(true);
@@ -134,10 +132,6 @@ export default function CompetitorManagementPage() {
       googlePlayId: form.googlePlayId || null,
       websiteUrl: form.websiteUrl || null,
       monitorUrls: form.monitorUrls.split('\n').filter(Boolean).map(line => {
-        const [label, url] = line.split('|');
-        return { label: label?.trim() || '', url: url?.trim() || label?.trim() || '' };
-      }),
-      rssFeeds: form.rssFeeds.split('\n').filter(Boolean).map(line => {
         const [label, url] = line.split('|');
         return { label: label?.trim() || '', url: url?.trim() || label?.trim() || '' };
       }),
@@ -258,7 +252,7 @@ export default function CompetitorManagementPage() {
                     {c.appStoreId && <Chip label="App Store" size="small" color="primary" variant="outlined" />}
                     {c.googlePlayId && <Chip label="Google Play" size="small" color="success" variant="outlined" />}
                     {c.websiteUrl && <Chip label="官网" size="small" color="info" variant="outlined" />}
-                    {(c.rssFeeds || []).length > 0 && <Chip label={`RSS x${(c.rssFeeds || []).length}`} size="small" variant="outlined" />}
+                    {(c.keywords || []).length > 0 && <Chip label={`关键词 x${(c.keywords || []).length}`} size="small" color="secondary" variant="outlined" />}
                   </Box>
                   <Divider sx={{ my: 1 }} />
                   <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -284,8 +278,7 @@ export default function CompetitorManagementPage() {
             <TextField label="Google Play ID" value={form.googlePlayId} onChange={e => setForm({ ...form, googlePlayId: e.target.value })} size="small" placeholder="如: com.example.game" />
             <TextField label="官网 URL" value={form.websiteUrl} onChange={e => setForm({ ...form, websiteUrl: e.target.value })} size="small" placeholder="https://..." />
             <TextField label="额外监控 URL（每行一个, 格式: 标签|URL）" value={form.monitorUrls} onChange={e => setForm({ ...form, monitorUrls: e.target.value })} size="small" multiline rows={3} placeholder="公告页|https://example.com/news" />
-            <TextField label="RSS 源（每行一个, 格式: 名称|URL）" value={form.rssFeeds} onChange={e => setForm({ ...form, rssFeeds: e.target.value })} size="small" multiline rows={3} placeholder="GameLook|https://www.gamelook.com.cn/feed" />
-            <TextField label="搜索关键词（逗号分隔）" value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} size="small" placeholder="原神, Genshin, miHoYo" />
+            <TextField label="搜索关键词 *（逗号分隔，用于网页搜索）" value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} size="small" placeholder="原神, Genshin, miHoYo" helperText="系统将通过 Google 搜索这些关键词来获取竞品新闻" />
           </Box>
         </DialogContent>
         <DialogActions>
