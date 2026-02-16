@@ -264,7 +264,7 @@ export default function FeishuChatsPage() {
                     cursor: 'pointer',
                     transition: 'background 0.15s',
                     borderRadius: isMobile ? 2 : 0,
-                    bgcolor: isMobile ? dt.bg.card : 'transparent',
+                    bgcolor: isMobile ? dt.bg.elevated : 'transparent',
                     borderBottom: !isMobile && index < chats.length - 1 ? `1px solid ${dt.border.subtle}` : 'none',
                     '&:hover': { bgcolor: alpha(dt.accent.main, 0.04) },
                   }}
