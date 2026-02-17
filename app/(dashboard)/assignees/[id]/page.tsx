@@ -1183,7 +1183,7 @@ export default function AssigneeDetailPage({ params }: AssigneeDetailPageProps) 
                   border: `1px solid ${dt.border.default}`,
                   borderRadius: 2,
                   cursor: 'pointer',
-                  '&:hover': { borderColor: dt.border.hover },
+                  '&:hover': { borderColor: dt.border.strong },
                 }}
                 elevation={0}
                 onClick={() => router.push(`/okr/${obj.id}`)}

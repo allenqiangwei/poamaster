@@ -88,6 +88,12 @@ export async function POST(request: NextRequest) {
           if (result.status === 'fulfilled' && result.value !== null) {
             const { analysis, comboId } = result.value;
 
+            // Skip cards that LLM marked as no-increment
+            if (analysis.title.includes('[无增量]')) {
+              console.log(`[Briefing] Skipping no-increment card for topic "${topic.name}": ${analysis.title}`);
+              continue;
+            }
+
             const card = await prisma.insightCard.create({
               data: {
                 briefingId: briefing.id,
@@ -110,6 +116,86 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error(`[Briefing] Topic "${topic.name}" failed:`, error);
       }
+    }
+
+    // 5. Generate competitor intelligence card (if data available)
+    try {
+      const { collectCompetitorData } = await import('@/lib/insights/collector');
+      const competitorData = await collectCompetitorData();
+
+      if (competitorData.competitors.length > 0) {
+        const competitorContext = competitorData.competitors.map(c => {
+          let text = `## ${c.name}\n`;
+          if (c.appSnapshots.length > 0) {
+            const latest = c.appSnapshots[0];
+            text += `- 评分: ${latest.rating ?? 'N/A'}, 版本: ${latest.version ?? 'N/A'}\n`;
+            if (latest.releaseNotes) text += `- 更新说明: ${latest.releaseNotes.substring(0, 200)}\n`;
+          }
+          if (c.reviewSummary.total > 0) {
+            text += `- 新评论 ${c.reviewSummary.total} 条, 平均评分 ${c.reviewSummary.avgRating ?? 'N/A'}\n`;
+            if (c.reviewSummary.topIssues.length > 0) text += `- 主要问题: ${c.reviewSummary.topIssues.join(', ')}\n`;
+          }
+          for (const wc of c.webChanges) {
+            text += `- 网站变化: ${wc.summary}\n`;
+          }
+          for (const n of c.news) {
+            text += `- 新闻: ${n.title} (${n.source})\n`;
+          }
+          return text;
+        }).join('\n');
+
+        if (competitorContext.trim()) {
+          const client = await getOpenAIClient();
+
+          const response = await client.chat.completions.create({
+            model: BRIEFING_MODEL,
+            messages: [
+              {
+                role: 'system',
+                content: `你是一位竞品情报分析师。根据以下竞品数据，生成一份简洁的竞品动态分析。
+输出严格 JSON 格式：
+{
+  "title": "一句话标题，有信息量",
+  "summary": "3-5句话核心要点",
+  "details": "Markdown 格式的详细分析（200-400字），叙事式展开，提到具体竞品名、数据、时间",
+  "impact": "对我们的影响（一句话）或 null",
+  "action": "建议行动 或 null"
+}`,
+              },
+              {
+                role: 'user',
+                content: `以下是过去 24 小时的竞品动态数据：\n\n${competitorContext}\n\n请分析并生成竞品情报卡片。`,
+              },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.4,
+            max_completion_tokens: 2000,
+          });
+
+          const content = response.choices[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            const card = await prisma.insightCard.create({
+              data: {
+                briefingId: briefing.id,
+                category: 'competitor',
+                priority: competitorData.alerts.length > 0 ? 'high' : 'medium',
+                title: parsed.title || '竞品动态',
+                summary: parsed.summary || '',
+                details: parsed.details || '',
+                impact: parsed.impact || null,
+                action: parsed.action || null,
+                sources: [],
+              },
+            });
+            cards.push(card);
+            console.log('[Briefing] Competitor intelligence card created');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Briefing] Competitor intelligence card failed:', error);
+      // Non-critical — continue with briefing even if competitor card fails
     }
 
     // 6. Generate executive summary using LLM

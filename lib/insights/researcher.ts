@@ -5,6 +5,50 @@ import { getOpenAIClient, getOpenAIModel } from '@/lib/openai';
 import { getConfig } from '@/lib/config';
 import type { InsightTopic } from '@prisma/client';
 
+// ========== Recently Used URL Cache ==========
+
+/**
+ * Get URLs that have been cited in InsightCards in the last N days.
+ * Used to filter out already-analyzed search results.
+ */
+async function getRecentlyUsedUrls(days: number = 7): Promise<Set<string>> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const recentCards = await prisma.insightCard.findMany({
+    where: { createdAt: { gte: since } },
+    select: { sources: true },
+  });
+
+  const urls = new Set<string>();
+  for (const card of recentCards) {
+    const sources = card.sources as any[];
+    if (Array.isArray(sources)) {
+      for (const s of sources) {
+        if (s?.url) urls.add(s.url);
+      }
+    }
+  }
+  return urls;
+}
+
+/**
+ * Get recent card titles for a specific topic (for dedup context in prompts).
+ */
+export async function getRecentCardTitles(topicId: string, days: number = 3): Promise<string[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const cards = await prisma.insightCard.findMany({
+    where: { topicId, createdAt: { gte: since } },
+    select: { title: true },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  });
+
+  return cards.map(c => c.title);
+}
+
 // ========== Types ==========
 
 export interface SearchResult {
@@ -222,6 +266,9 @@ export async function analyzeTopicWithContext(
     })
     .join('\n\n');
 
+  // Get recent card titles for this topic to avoid repetition (Layer 3 dedup)
+  const recentTitles = await getRecentCardTitles(topic.id, 3);
+
   // Build the user prompt
   let userPrompt = `## 研究话题
 话题名称：${topic.name}`;
@@ -236,6 +283,11 @@ export async function analyzeTopicWithContext(
     userPrompt += `\n\n## 内部数据参考\n${internalContext}`;
   }
 
+  // Inject recent coverage to prevent repetition
+  if (recentTitles.length > 0) {
+    userPrompt += `\n\n## 近期已覆盖事件（请勿重复分析）\n以下是近 3 天该话题已生成的洞察卡片标题，请聚焦新发现，不要重复这些内容：\n${recentTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+  }
+
   userPrompt += `\n\n请基于以上搜索结果，撰写一篇深度洞察分析。
 
 写作指导：
@@ -244,6 +296,8 @@ export async function analyzeTopicWithContext(
 3. details 中要具体提到搜索结果里的**产品名、公司名、活动名、数据、日期**
 4. 如果多条搜索结果从不同角度说同一件事，要综合成完整画面并构建因果链
 5. 在分析中自然地引用信息来源（如"根据 XX 报道..."、"XX 社区的讨论显示..."）
+6. **重要：如果搜索结果中的事件与"近期已覆盖事件"高度重叠，请聚焦增量信息（新进展、新数据、新观点），不要重复旧分析**
+7. 如果所有搜索结果都是旧事件的重复报道，没有任何新信息，请在 title 中标注 "[无增量]" 前缀
 
 返回 JSON 格式。`;
 
@@ -406,7 +460,23 @@ export async function searchWithCombo(
   // Filter out results older than 7 days
   const recentResults = allResults.filter((r) => isWithinLast7Days(r.date));
 
-  return recentResults;
+  // Filter out URLs already used in recent cards (Layer 1 dedup)
+  let usedUrls = await getRecentlyUsedUrls(7);
+  let dedupedResults = recentResults.filter(r => !usedUrls.has(r.url));
+
+  // If too few results remain, relax to 3-day window
+  if (dedupedResults.length < 3 && recentResults.length >= 3) {
+    usedUrls = await getRecentlyUsedUrls(3);
+    dedupedResults = recentResults.filter(r => !usedUrls.has(r.url));
+    console.log(`[Researcher] URL dedup relaxed to 3-day window: ${dedupedResults.length}/${recentResults.length} results kept`);
+  } else {
+    const filtered = recentResults.length - dedupedResults.length;
+    if (filtered > 0) {
+      console.log(`[Researcher] URL dedup: filtered ${filtered} already-used URLs, ${dedupedResults.length} remaining`);
+    }
+  }
+
+  return dedupedResults;
 }
 
 /**
