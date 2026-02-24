@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
+import { generateVariationCombo, generateCombosForTopic } from '@/lib/insights/keyword-engine';
 
 /**
  * PUT /api/insights/cards/[id]/feedback
@@ -41,6 +42,10 @@ export async function PUT(
 
     // Update the combo if the card is linked to one
     if (card.comboId) {
+      const combo = await prisma.keywordCombo.findUnique({
+        where: { id: card.comboId },
+      });
+
       if (feedback === 1) {
         // 👍: Boost combo score (+10, cap at 100)
         await prisma.keywordCombo.update({
@@ -55,6 +60,13 @@ export async function PUT(
           where: { id: card.comboId, score: { gt: 100 } },
           data: { score: 100 },
         });
+
+        // Generate a variation combo inspired by the liked one (async, non-blocking)
+        if (combo && card.topicId) {
+          generateVariationCombo(card.topicId, combo).catch((err) =>
+            console.log('[Feedback] Variation combo generation failed:', err)
+          );
+        }
       } else {
         // 👎: Retire the combo immediately
         await prisma.keywordCombo.update({
@@ -64,6 +76,18 @@ export async function PUT(
             feedback: -1,
           },
         });
+
+        // Generate a replacement combo for this topic (async, non-blocking)
+        if (card.topicId) {
+          const topic = await prisma.insightTopic.findUnique({
+            where: { id: card.topicId },
+          });
+          if (topic) {
+            generateCombosForTopic(topic).catch((err) =>
+              console.log('[Feedback] Replacement combo generation failed:', err)
+            );
+          }
+        }
       }
     }
 

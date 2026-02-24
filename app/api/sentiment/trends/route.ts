@@ -30,25 +30,39 @@ export async function GET(request: NextRequest) {
       ? gameIdsParam.split(',').filter(id => games.some(g => g.id === id))
       : games.map(g => g.id);
 
-    // Build where clause
-    const where: any = {
+    // Build where clauses
+    const reviewWhere: any = {
       gameId: { in: gameIds },
       publishedAt: { gte: since },
     };
-    if (platformParam) where.platform = platformParam;
+    const mentionWhere: any = {
+      gameId: { in: gameIds },
+      publishedAt: { gte: since },
+    };
+    if (platformParam) {
+      if (platformParam === 'X') {
+        // Only mentions for X
+        reviewWhere.platform = '__NONE__'; // exclude reviews
+        mentionWhere.platform = 'X';
+      } else {
+        reviewWhere.platform = platformParam;
+        mentionWhere.platform = '__NONE__'; // exclude mentions
+      }
+    }
 
-    // Fetch all reviews in range
-    const reviews = await prisma.sentimentReview.findMany({
-      where,
-      select: {
-        gameId: true,
-        platform: true,
-        rating: true,
-        sentimentLabel: true,
-        publishedAt: true,
-      },
-      orderBy: { publishedAt: 'asc' },
-    });
+    // Fetch reviews + mentions in range
+    const [reviews, mentions] = await Promise.all([
+      prisma.sentimentReview.findMany({
+        where: reviewWhere,
+        select: { gameId: true, platform: true, rating: true, sentimentLabel: true, publishedAt: true },
+        orderBy: { publishedAt: 'asc' },
+      }),
+      prisma.sentimentMention.findMany({
+        where: mentionWhere,
+        select: { gameId: true, platform: true, sentimentLabel: true, publishedAt: true },
+        orderBy: { publishedAt: 'asc' },
+      }),
+    ]);
 
     // Aggregate by date + game
     const dailyMap = new Map<string, {
@@ -60,34 +74,48 @@ export async function GET(request: NextRequest) {
       unanalyzed: number;
       total: number;
       ratingSum: number;
+      ratingCount: number;
       appStore: number;
       googlePlay: number;
+      x: number;
     }>();
+
+    function getEntry(dateStr: string, gameId: string) {
+      const key = `${dateStr}|${gameId}`;
+      if (!dailyMap.has(key)) {
+        dailyMap.set(key, {
+          date: dateStr, gameId,
+          positive: 0, neutral: 0, negative: 0, unanalyzed: 0,
+          total: 0, ratingSum: 0, ratingCount: 0,
+          appStore: 0, googlePlay: 0, x: 0,
+        });
+      }
+      return dailyMap.get(key)!;
+    }
 
     for (const r of reviews) {
       const dateStr = r.publishedAt.toISOString().split('T')[0];
-      const key = `${dateStr}|${r.gameId}`;
-
-      if (!dailyMap.has(key)) {
-        dailyMap.set(key, {
-          date: dateStr,
-          gameId: r.gameId,
-          positive: 0, neutral: 0, negative: 0, unanalyzed: 0,
-          total: 0, ratingSum: 0,
-          appStore: 0, googlePlay: 0,
-        });
-      }
-
-      const entry = dailyMap.get(key)!;
+      const entry = getEntry(dateStr, r.gameId);
       entry.total++;
       entry.ratingSum += r.rating;
+      entry.ratingCount++;
       if (r.sentimentLabel === 'POSITIVE') entry.positive++;
       else if (r.sentimentLabel === 'NEGATIVE') entry.negative++;
       else if (r.sentimentLabel === 'NEUTRAL') entry.neutral++;
       else entry.unanalyzed++;
-
       if (r.platform === 'APP_STORE') entry.appStore++;
       else if (r.platform === 'GOOGLE_PLAY') entry.googlePlay++;
+    }
+
+    for (const m of mentions) {
+      const dateStr = m.publishedAt.toISOString().split('T')[0];
+      const entry = getEntry(dateStr, m.gameId);
+      entry.total++;
+      if (m.sentimentLabel === 'POSITIVE') entry.positive++;
+      else if (m.sentimentLabel === 'NEGATIVE') entry.negative++;
+      else if (m.sentimentLabel === 'NEUTRAL') entry.neutral++;
+      else entry.unanalyzed++;
+      if (m.platform === 'X') entry.x++;
     }
 
     // Build date range (fill missing dates with zeros)
@@ -102,6 +130,7 @@ export async function GET(request: NextRequest) {
       avgRating: number | null;
       appStore: number;
       googlePlay: number;
+      x: number;
     }> = [];
 
     for (let d = new Date(since); d <= new Date(); d.setDate(d.getDate() + 1)) {
@@ -119,11 +148,12 @@ export async function GET(request: NextRequest) {
           neutral: entry?.neutral ?? 0,
           negative: entry?.negative ?? 0,
           total: entry?.total ?? 0,
-          avgRating: entry && entry.total > 0
-            ? Math.round((entry.ratingSum / entry.total) * 100) / 100
+          avgRating: entry && entry.ratingCount > 0
+            ? Math.round((entry.ratingSum / entry.ratingCount) * 100) / 100
             : null,
           appStore: entry?.appStore ?? 0,
           googlePlay: entry?.googlePlay ?? 0,
+          x: entry?.x ?? 0,
         });
       }
     }
@@ -132,12 +162,14 @@ export async function GET(request: NextRequest) {
     const platformSummary = gameIds.map(gid => {
       const gameName = games.find(g => g.id === gid)?.name || '';
       const gameReviews = reviews.filter(r => r.gameId === gid);
+      const gameMentions = mentions.filter(m => m.gameId === gid);
       return {
         gameId: gid,
         gameName,
         appStore: gameReviews.filter(r => r.platform === 'APP_STORE').length,
         googlePlay: gameReviews.filter(r => r.platform === 'GOOGLE_PLAY').length,
-        total: gameReviews.length,
+        x: gameMentions.filter(m => m.platform === 'X').length,
+        total: gameReviews.length + gameMentions.length,
       };
     });
 

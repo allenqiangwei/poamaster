@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Paper,
   Typography,
   TextField,
@@ -279,7 +278,7 @@ export default function NewTaskPage() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton
           onClick={() => router.back()}
@@ -353,16 +352,16 @@ export default function NewTaskPage() {
               <Box
                 sx={{
                   border: '2px dashed',
-                  borderColor: isDragging ? 'primary.main' : selectedFile ? 'success.main' : 'grey.300',
+                  borderColor: isDragging ? 'primary.main' : selectedFile ? 'success.main' : 'divider',
                   borderRadius: 2,
                   p: 4,
                   textAlign: 'center',
-                  bgcolor: isDragging ? 'primary.50' : selectedFile ? 'success.50' : 'grey.50',
+                  bgcolor: isDragging ? 'rgba(96,165,250,0.06)' : selectedFile ? 'rgba(52,211,153,0.06)' : 'transparent',
                   cursor: loading ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s ease',
                   '&:hover': {
-                    borderColor: loading ? 'grey.300' : 'primary.main',
-                    bgcolor: loading ? 'grey.50' : 'primary.50',
+                    borderColor: loading ? 'divider' : 'primary.main',
+                    bgcolor: loading ? 'transparent' : 'rgba(96,165,250,0.06)',
                   },
                 }}
                 onDragEnter={handleDragEnter}
@@ -500,6 +499,6 @@ export default function NewTaskPage() {
         title="选择提取模型"
         description="请选择用于提取任务的 GPT 模型"
       />
-    </Container>
+    </Box>
   );
 }

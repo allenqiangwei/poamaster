@@ -41,6 +41,8 @@ import {
   Settings as SettingsIcon,
   AddCircleOutline as AddCircleIcon,
   Close as CloseIcon,
+  Send as SendIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import { designTokens as dt } from '@/lib/theme';
@@ -63,6 +65,8 @@ interface BriefingCard {
   sources: Source[];
   feedback: number | null;
   viewedAt: string | null;
+  isCooFocus: boolean;
+  sharedAt: string | null;
 }
 
 interface SuggestedTopic {
@@ -290,11 +294,14 @@ function StatusBadge({ status }: { status: string }) {
 function BriefingCardItem({
   card,
   onFeedback,
+  onShare,
 }: {
   card: BriefingCard;
   onFeedback: (id: string, feedback: number) => void;
+  onShare: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const viewedRef = useRef(false);
 
   const cat = CATEGORY_CONFIG[card.category] || {
@@ -315,6 +322,15 @@ function BriefingCardItem({
     }
   }, [expanded, card.viewedAt, card.id]);
 
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await onShare(card.id);
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <Card
       sx={{
@@ -328,21 +344,22 @@ function BriefingCardItem({
       elevation={0}
       onClick={() => setExpanded(!expanded)}
     >
-      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        {/* Collapsed header */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-          {/* Left: category icon + chip */}
+      <CardContent sx={{ p: { xs: 2, sm: 2.5 }, '&:last-child': { pb: { xs: 2, sm: 2.5 } } }}>
+        {/* Row 1: icon + title + (desktop: actions + expand) / (mobile: expand) */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: 1.5, sm: 2 } }}>
+          {/* Category icon */}
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
             <Box
               sx={{
-                width: 40,
-                height: 40,
+                width: { xs: 36, sm: 40 },
+                height: { xs: 36, sm: 40 },
                 borderRadius: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 bgcolor: `${cat.color}12`,
                 color: cat.color,
+                '& .MuiSvgIcon-root': { fontSize: { xs: 20, sm: 24 } },
               }}
             >
               {cat.icon}
@@ -361,19 +378,51 @@ function BriefingCardItem({
             />
           </Box>
 
-          {/* Center: title + summary */}
+          {/* Title + summary */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="subtitle1"
-              sx={{
-                fontWeight: 700,
-                color: dt.text.primary,
-                lineHeight: 1.4,
-                mb: 0.5,
-              }}
-            >
-              {card.title}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 700,
+                  color: dt.text.primary,
+                  lineHeight: 1.4,
+                  fontSize: { xs: '0.9rem', sm: '1rem' },
+                }}
+              >
+                {card.title}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                {card.isCooFocus && (
+                  <Chip
+                    icon={<StarIcon sx={{ fontSize: '14px !important' }} />}
+                    label="COO"
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.6rem',
+                      fontWeight: 700,
+                      bgcolor: 'rgba(245, 158, 11, 0.1)',
+                      color: '#d97706',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      '& .MuiChip-icon': { color: '#d97706 !important' },
+                    }}
+                  />
+                )}
+                <Chip
+                  label={pri.label}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    bgcolor: `${pri.color}12`,
+                    color: pri.color,
+                    border: `1px solid ${pri.color}30`,
+                  }}
+                />
+              </Box>
+            </Box>
             {!expanded && (
               <Typography
                 variant="body2"
@@ -384,6 +433,7 @@ function BriefingCardItem({
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
+                  fontSize: { xs: '0.82rem', sm: '0.875rem' },
                 }}
               >
                 {card.summary}
@@ -391,62 +441,127 @@ function BriefingCardItem({
             )}
           </Box>
 
-          {/* Right: priority + feedback + expand */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-            <Chip
-              label={pri.label}
-              size="small"
-              sx={{
-                height: 22,
-                fontSize: '0.68rem',
-                fontWeight: 600,
-                bgcolor: `${pri.color}12`,
-                color: pri.color,
-                border: `1px solid ${pri.color}30`,
-              }}
-            />
-            {/* Feedback buttons */}
-            <Box sx={{ display: 'flex', gap: 0 }} onClick={(e) => e.stopPropagation()}>
-              <Tooltip title="有用" arrow>
+          {/* Desktop: inline action buttons + expand arrow */}
+          <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 0.5, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+            <Tooltip title="有用" arrow>
+              <IconButton
+                size="small"
+                onClick={() => onFeedback(card.id, 1)}
+                sx={{
+                  color: card.feedback === 1 ? dt.success.main : dt.text.muted,
+                  '&:hover': { color: dt.success.main, bgcolor: dt.success.subtle },
+                }}
+              >
+                {card.feedback === 1 ? <ThumbUpIcon fontSize="small" /> : <ThumbUpOutlinedIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="无用" arrow>
+              <IconButton
+                size="small"
+                onClick={() => onFeedback(card.id, -1)}
+                sx={{
+                  color: card.feedback === -1 ? dt.danger.main : dt.text.muted,
+                  '&:hover': { color: dt.danger.main, bgcolor: dt.danger.subtle },
+                }}
+              >
+                {card.feedback === -1 ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={card.isCooFocus ? '已分享到飞书' : '分享到飞书'} arrow>
+              <span>
                 <IconButton
                   size="small"
-                  onClick={() => onFeedback(card.id, 1)}
+                  onClick={handleShare}
+                  disabled={sharing}
                   sx={{
-                    color: card.feedback === 1 ? dt.success.main : dt.text.muted,
-                    '&:hover': { color: dt.success.main, bgcolor: dt.success.subtle },
+                    color: card.isCooFocus ? '#d97706' : dt.text.muted,
+                    '&:hover': { color: dt.accent.main, bgcolor: dt.accent.subtle },
                   }}
                 >
-                  {card.feedback === 1 ? <ThumbUpIcon fontSize="small" /> : <ThumbUpOutlinedIcon fontSize="small" />}
+                  {sharing ? (
+                    <CircularProgress size={18} thickness={5} sx={{ color: dt.accent.main }} />
+                  ) : (
+                    <SendIcon fontSize="small" />
+                  )}
                 </IconButton>
-              </Tooltip>
-              <Tooltip title="无用" arrow>
-                <IconButton
-                  size="small"
-                  onClick={() => onFeedback(card.id, -1)}
-                  sx={{
-                    color: card.feedback === -1 ? dt.danger.main : dt.text.muted,
-                    '&:hover': { color: dt.danger.main, bgcolor: dt.danger.subtle },
-                  }}
-                >
-                  {card.feedback === -1 ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <ExpandMoreIcon
-              sx={{
-                color: dt.text.muted,
-                transition: 'transform 0.3s',
-                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              }}
-            />
+              </span>
+            </Tooltip>
           </Box>
+
+          {/* Expand arrow */}
+          <ExpandMoreIcon
+            sx={{
+              color: dt.text.muted,
+              transition: 'transform 0.3s',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              flexShrink: 0,
+              mt: 0.5,
+            }}
+          />
+        </Box>
+
+        {/* Mobile-only: action buttons row */}
+        <Box
+          sx={{
+            display: { xs: 'flex', sm: 'none' },
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 0,
+            mt: 1,
+            pl: 6,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Tooltip title="有用" arrow>
+            <IconButton
+              size="small"
+              onClick={() => onFeedback(card.id, 1)}
+              sx={{
+                color: card.feedback === 1 ? dt.success.main : dt.text.muted,
+                '&:hover': { color: dt.success.main, bgcolor: dt.success.subtle },
+              }}
+            >
+              {card.feedback === 1 ? <ThumbUpIcon sx={{ fontSize: 18 }} /> : <ThumbUpOutlinedIcon sx={{ fontSize: 18 }} />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="无用" arrow>
+            <IconButton
+              size="small"
+              onClick={() => onFeedback(card.id, -1)}
+              sx={{
+                color: card.feedback === -1 ? dt.danger.main : dt.text.muted,
+                '&:hover': { color: dt.danger.main, bgcolor: dt.danger.subtle },
+              }}
+            >
+              {card.feedback === -1 ? <ThumbDownIcon sx={{ fontSize: 18 }} /> : <ThumbDownOutlinedIcon sx={{ fontSize: 18 }} />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={card.isCooFocus ? '已分享到飞书' : '分享到飞书'} arrow>
+            <span>
+              <IconButton
+                size="small"
+                onClick={handleShare}
+                disabled={sharing}
+                sx={{
+                  color: card.isCooFocus ? '#d97706' : dt.text.muted,
+                  '&:hover': { color: dt.accent.main, bgcolor: dt.accent.subtle },
+                }}
+              >
+                {sharing ? (
+                  <CircularProgress size={16} thickness={5} sx={{ color: dt.accent.main }} />
+                ) : (
+                  <SendIcon sx={{ fontSize: 18 }} />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
         </Box>
 
         {/* Expanded content */}
         <Collapse in={expanded}>
-          <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${dt.border.default}` }}>
+          <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${dt.border.default}` }}>
             {/* Full summary */}
-            <Typography variant="body2" sx={{ color: dt.text.secondary, lineHeight: 1.7, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: dt.text.secondary, lineHeight: 1.8, mb: 2, fontSize: { xs: '0.82rem', sm: '0.875rem' } }}>
               {card.summary}
             </Typography>
 
@@ -667,6 +782,29 @@ export default function BriefingPage() {
     }
   };
 
+  const handleShare = async (cardId: string) => {
+    try {
+      const res = await fetch(`/api/insights/cards/${cardId}/share`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success && briefing) {
+        setBriefing({
+          ...briefing,
+          cards: briefing.cards.map((c) =>
+            c.id === cardId ? { ...c, isCooFocus: true, sharedAt: new Date().toISOString() } : c
+          ),
+        });
+        setSnackbar('已分享到飞书');
+      } else {
+        setSnackbar(data.error || '分享失败');
+      }
+    } catch {
+      setSnackbar('网络错误，分享失败');
+    }
+  };
+
   // ─── Suggested topic handlers ──────────────────────────
   const handleSuggestion = async (id: string, action: 'accept' | 'dismiss') => {
     try {
@@ -716,18 +854,10 @@ export default function BriefingPage() {
               </Typography>
             </Box>
 
-            {/* Controls row */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 1.5,
-              }}
-            >
-              {/* Date navigation */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Controls — stacked on mobile */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {/* Date navigation row */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <Tooltip title="前一天" arrow>
                   <IconButton
                     size="small"
@@ -745,7 +875,7 @@ export default function BriefingPage() {
 
                 <Typography
                   variant="body1"
-                  sx={{ color: dt.text.primary, fontWeight: 600, minWidth: 160, textAlign: 'center' }}
+                  sx={{ color: dt.text.primary, fontWeight: 600, textAlign: 'center', fontSize: { xs: '0.85rem', sm: '1rem' } }}
                 >
                   {formatDateDisplay(selectedDate)}
                 </Typography>
@@ -785,7 +915,7 @@ export default function BriefingPage() {
                 {briefing && <StatusBadge status={briefing.status} />}
               </Box>
 
-              {/* Actions */}
+              {/* Actions row */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Button
                   variant="outlined"
@@ -926,7 +1056,7 @@ export default function BriefingPage() {
           {briefing.summary && (
             <Fade in timeout={800}>
               <Card sx={{ ...CARD_STYLE, mb: 3, '&:hover': { ...CARD_STYLE['&:hover'], transform: 'none' } }} elevation={0}>
-                <CardContent sx={{ p: 2.5 }}>
+                <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                     <SparkleIcon sx={{ color: dt.accent.main, fontSize: 18 }} />
                     <Typography variant="subtitle2" sx={{ color: dt.text.primary, fontWeight: 700 }}>
@@ -938,7 +1068,7 @@ export default function BriefingPage() {
                       <Typography
                         key={i}
                         variant="body2"
-                        sx={{ color: dt.text.secondary, lineHeight: 1.7 }}
+                        sx={{ color: dt.text.secondary, lineHeight: 1.8, fontSize: { xs: '0.82rem', sm: '0.875rem' } }}
                       >
                         {renderInlineMarkdown(line)}
                       </Typography>
@@ -954,7 +1084,7 @@ export default function BriefingPage() {
             {briefing.cards.map((card, i) => (
               <Fade in timeout={400 + i * 100} key={card.id}>
                 <Box>
-                  <BriefingCardItem card={card} onFeedback={handleFeedback} />
+                  <BriefingCardItem card={card} onFeedback={handleFeedback} onShare={handleShare} />
                 </Box>
               </Fade>
             ))}
@@ -964,10 +1094,10 @@ export default function BriefingPage() {
           {briefing.suggestedTopics && briefing.suggestedTopics.length > 0 && (
             <Fade in timeout={800}>
               <Card sx={{ ...CARD_STYLE, mt: 3, '&:hover': { ...CARD_STYLE['&:hover'], transform: 'none' } }} elevation={0}>
-                <CardContent sx={{ p: 2.5 }}>
+                <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <LightbulbIcon sx={{ color: dt.warning.main, fontSize: 18 }} />
-                    <Typography variant="subtitle2" sx={{ color: dt.text.primary, fontWeight: 700 }}>
+                    <Typography variant="subtitle2" sx={{ color: dt.text.primary, fontWeight: 700, fontSize: { xs: '0.85rem', sm: '0.875rem' } }}>
                       AI 发现了这些值得关注的新话题
                     </Typography>
                   </Box>
@@ -978,8 +1108,8 @@ export default function BriefingPage() {
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 2,
-                          p: 1.5,
+                          gap: { xs: 1.5, sm: 2 },
+                          p: { xs: 1.25, sm: 1.5 },
                           borderRadius: '12px',
                           bgcolor: dt.bg.surface,
                           border: `1px solid ${dt.border.default}`,
@@ -989,7 +1119,7 @@ export default function BriefingPage() {
                           <Typography variant="subtitle2" sx={{ color: dt.text.primary, fontWeight: 600 }}>
                             {s.name}
                           </Typography>
-                          <Typography variant="body2" sx={{ color: dt.text.secondary, fontSize: '0.82rem' }}>
+                          <Typography variant="body2" sx={{ color: dt.text.secondary, fontSize: '0.82rem', lineHeight: 1.6 }}>
                             {s.reason}
                           </Typography>
                         </Box>

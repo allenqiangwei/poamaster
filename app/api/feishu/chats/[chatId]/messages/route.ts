@@ -24,7 +24,7 @@ export async function GET(
     const [messages, total] = await Promise.all([
       prisma.feishuMessage.findMany({
         where: { chatId },
-        orderBy: { timestamp: 'asc' },
+        orderBy: { timestamp: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),

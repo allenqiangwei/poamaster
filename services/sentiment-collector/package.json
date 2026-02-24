@@ -12,8 +12,11 @@
     "schema": "../../prisma/schema.prisma"
   },
   "dependencies": {
+    "@the-convocation/twitter-scraper": "^0.21.1",
     "app-store-scraper": "^0.18.0",
+    "cycletls": "^2.0.5",
     "google-play-scraper": "^9.1.1",
+    "https-proxy-agent": "^7.0.6",
     "node-cron": "^3.0.0",
     "sentiment": "^5.0.2"
   },

@@ -21,12 +21,14 @@ import {
   DialogContent,
   DialogActions,
   Autocomplete,
+  Snackbar,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Group as GroupIcon,
   Person as PersonIcon,
   Edit as EditIcon,
+  PlaylistAdd as PlaylistAddIcon,
 } from '@mui/icons-material';
 
 interface Message {
@@ -50,6 +52,7 @@ interface Chat {
 interface AssigneeOption {
   id: string;
   name: string;
+  feishuUserId?: string;
 }
 
 /** Shorten a numeric ID to last 6 chars for readability */
@@ -103,6 +106,18 @@ export default function FeishuChatDetailPage({
   // Assignee options for dropdown
   const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([]);
 
+  // Task creation dialog
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskAssigneeId, setTaskAssigneeId] = useState<string | null>(null);
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskCreating, setTaskCreating] = useState(false);
+  const [taskError, setTaskError] = useState('');
+
+  // Snackbar
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
   const loadMessages = useCallback(async (pageNum: number, append = false) => {
     if (append) {
       setLoadingMore(true);
@@ -148,7 +163,11 @@ export default function FeishuChatDetailPage({
       .then(res => res.json())
       .then(data => {
         if (data.success && data.data) {
-          setAssigneeOptions(data.data.map((a: any) => ({ id: a.id, name: a.name })));
+          setAssigneeOptions(data.data.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            feishuUserId: a.feishuUserId || undefined,
+          })));
         }
       });
     loadMessages(1);
@@ -235,21 +254,64 @@ export default function FeishuChatDetailPage({
     }
   };
 
+  const openTaskDialog = (msg: Message) => {
+    const title = msg.content.length > 200 ? msg.content.substring(0, 200) + '...' : msg.content;
+    setTaskTitle(title);
+    setTaskError('');
+    setTaskDueDate('');
+    // Auto-match assignee by feishuUserId
+    const matched = assigneeOptions.find(a => a.feishuUserId === msg.senderId);
+    setTaskAssigneeId(matched?.id || null);
+    setTaskDialogOpen(true);
+  };
+
+  const handleCreateTask = async () => {
+    if (!taskTitle.trim()) return;
+    setTaskCreating(true);
+    setTaskError('');
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskTitle.trim(),
+          assigneeId: taskAssigneeId || undefined,
+          dueDate: taskDueDate || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTaskDialogOpen(false);
+        setSnackbarMessage('任务已创建');
+        setSnackbarOpen(true);
+      } else {
+        setTaskError(data.error || '创建失败');
+      }
+    } catch {
+      setTaskError('网络错误');
+    } finally {
+      setTaskCreating(false);
+    }
+  };
+
   const displayName = chatDisplayName(chat, chatId);
   const isUnnamed = !chat?.name || chat.name === chat.chatId;
 
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <IconButton onClick={() => router.push('/feishu/chats')}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Avatar sx={{ bgcolor: chat?.chatType === 'group' ? 'primary.main' : 'secondary.main' }}>
-          {chat?.chatType === 'group' ? <GroupIcon /> : <PersonIcon />}
-        </Avatar>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, mb: 3, gap: { xs: 1, sm: 2 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton onClick={() => router.push('/feishu/chats')}>
+            <ArrowBackIcon />
+          </IconButton>
+          <Avatar sx={{ bgcolor: chat?.chatType === 'group' ? 'primary.main' : 'secondary.main', display: { xs: 'none', sm: 'flex' } }}>
+            {chat?.chatType === 'group' ? <GroupIcon /> : <PersonIcon />}
+          </Avatar>
+        </Box>
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography
               variant="h5"
               sx={{
@@ -265,7 +327,7 @@ export default function FeishuChatDetailPage({
               </IconButton>
             </Tooltip>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
             <Chip
               label={chat?.chatType === 'group' ? '群聊' : '私聊'}
               size="small"
@@ -295,7 +357,7 @@ export default function FeishuChatDetailPage({
             {/* Message Timeline */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {messages.map((msg, index) => {
-                // Show date separator
+                // Show date separator (messages are newest-first)
                 const showDate = index === 0 ||
                   new Date(msg.timestamp).toDateString() !== new Date(messages[index - 1].timestamp).toDateString();
 
@@ -317,7 +379,7 @@ export default function FeishuChatDetailPage({
                     )}
                     <Paper
                       variant="outlined"
-                      sx={{ p: 1.5, bgcolor: 'grey.50' }}
+                      sx={{ p: 1.5, bgcolor: 'transparent' }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <Avatar
@@ -349,6 +411,15 @@ export default function FeishuChatDetailPage({
                             onClick={() => openSenderRename(msg.senderId, name)}
                           >
                             <EditIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="添加到任务">
+                          <IconButton
+                            size="small"
+                            sx={{ p: 0.25, opacity: 0.5, '&:hover': { opacity: 1, color: 'primary.main' } }}
+                            onClick={() => openTaskDialog(msg)}
+                          >
+                            <PlaylistAddIcon sx={{ fontSize: 16 }} />
                           </IconButton>
                         </Tooltip>
                         <Typography variant="caption" color="text.secondary">
@@ -452,6 +523,58 @@ export default function FeishuChatDetailPage({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Create Task Dialog */}
+      <Dialog open={taskDialogOpen} onClose={() => setTaskDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>添加到任务</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+          {taskError && <Alert severity="error">{taskError}</Alert>}
+          <TextField
+            autoFocus
+            fullWidth
+            label="任务标题"
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            multiline
+            maxRows={4}
+          />
+          <Autocomplete
+            options={assigneeOptions}
+            getOptionLabel={(option) => option.name}
+            value={assigneeOptions.find(a => a.id === taskAssigneeId) || null}
+            onChange={(_e, newValue) => setTaskAssigneeId(newValue?.id || null)}
+            renderInput={(params) => (
+              <TextField {...params} label="负责人" placeholder="选择负责人" />
+            )}
+          />
+          <TextField
+            fullWidth
+            label="截止日期"
+            type="date"
+            value={taskDueDate}
+            onChange={(e) => setTaskDueDate(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTaskDialogOpen(false)}>取消</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateTask}
+            disabled={taskCreating || !taskTitle.trim()}
+          >
+            {taskCreating ? '创建中...' : '创建任务'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Success Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+      />
     </Box>
   );
 }

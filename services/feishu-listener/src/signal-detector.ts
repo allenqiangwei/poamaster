@@ -69,12 +69,15 @@ async function loadWhitelists(): Promise<void> {
   if (!prisma) return;
   try {
     const [chats, senders] = await Promise.all([
-      prisma.feishuChat.findMany({ where: { isWhitelisted: true }, select: { chatId: true } }),
+      prisma.feishuChat.findMany({ where: { isWhitelisted: true }, select: { chatId: true, name: true } }),
       prisma.alertSenderWhitelist.findMany({ select: { senderId: true } }),
     ]);
     whitelistedChatIds = new Set(chats.map((c: any) => c.chatId));
     whitelistedSenderIds = new Set(senders.map((s: any) => s.senderId));
-  } catch { /* ignore, use empty sets */ }
+    logger.info(`[Signal] Whitelist loaded: ${chats.length} chats [${chats.map((c: any) => c.name || c.chatId).join(', ')}], ${senders.length} senders`);
+  } catch (err: any) {
+    logger.error(`[Signal] Failed to load whitelists: ${err.message}`);
+  }
 }
 
 export async function reloadConfig(): Promise<void> {

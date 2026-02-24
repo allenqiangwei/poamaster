@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Container } from '@mui/material';
+import { Box } from '@mui/material';
 import Header from '@/components/Header';
 
 export default function RoundtableLayout({
@@ -9,12 +9,10 @@ export default function RoundtableLayout({
   children: React.ReactNode;
 }) {
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
+    <Box sx={{ minHeight: '100vh' }}>
       <Header />
-      <Box component="main">
-        <Container maxWidth="xl" sx={{ py: 4 }}>
-          {children}
-        </Container>
+      <Box component="main" sx={{ px: { xs: 2, sm: 3, md: 4 }, py: 3, maxWidth: 1400, mx: 'auto' }}>
+        {children}
       </Box>
     </Box>
   );

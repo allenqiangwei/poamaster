@@ -169,11 +169,17 @@ async function main() {
     );
   });
 
-  // Connect WebSocket
+  // Connect WebSocket with re-auth callback
   connect({
     wsUrl: credentials.wsUrl,
     onDisconnect: () => {
       logger.warn('Disconnected from Feishu WebSocket');
+    },
+    onNeedReauth: async () => {
+      logger.info('Re-authenticating to obtain fresh ticket...');
+      const newCredentials = await authenticate(config.cookie);
+      logger.info('Re-authentication successful');
+      return newCredentials.wsUrl;
     },
   });
 

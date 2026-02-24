@@ -431,8 +431,8 @@ export default function UploadPage() {
               mb: 3,
               textAlign: 'center',
               border: '2px dashed',
-              borderColor: file ? 'primary.main' : 'grey.400',
-              bgcolor: file ? 'primary.50' : 'grey.50',
+              borderColor: file ? 'primary.main' : 'divider',
+              bgcolor: file ? 'rgba(96,165,250,0.06)' : 'transparent',
               cursor: 'pointer',
               '&:hover': { borderColor: 'primary.main' },
               '&:focus': { borderColor: 'primary.main', outline: 'none' },
@@ -469,7 +469,7 @@ export default function UploadPage() {
               </>
             ) : (
               <>
-                <CloudUploadIcon sx={{ fontSize: 48, color: 'grey.500', mb: 1 }} />
+                <CloudUploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
                 <Typography>点击、拖拽文件到此处，或直接粘贴截图</Typography>
                 <Typography variant="caption" color="text.secondary">
                   支持 PDF、TXT、JPG、PNG 格式
@@ -536,7 +536,7 @@ export default function UploadPage() {
                     sx={{
                       cursor: 'pointer',
                       border: 2,
-                      borderColor: isSelected ? 'primary.main' : 'grey.300',
+                      borderColor: isSelected ? 'primary.main' : 'divider',
                       borderRadius: 1,
                       overflow: 'hidden',
                       position: 'relative',
@@ -555,7 +555,7 @@ export default function UploadPage() {
                       sx={{
                         width: '100%',
                         display: 'block',
-                        bgcolor: 'grey.100',
+                        bgcolor: 'transparent',
                         minHeight: 120,
                       }}
                     />
@@ -582,7 +582,7 @@ export default function UploadPage() {
                         display: 'block',
                         textAlign: 'center',
                         py: 0.5,
-                        bgcolor: isSelected ? 'primary.50' : 'grey.50',
+                        bgcolor: isSelected ? 'rgba(96,165,250,0.06)' : 'transparent',
                         fontWeight: isSelected ? 'bold' : 'normal',
                       }}
                     >

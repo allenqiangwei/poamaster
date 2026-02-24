@@ -142,15 +142,16 @@ export default function DiscussionDetailPage() {
       </Box>
 
       {/* 屏幕显示的标题栏 */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }} className="no-print">
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2, mb: 4 }} className="no-print">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Button
             startIcon={<BackIcon />}
             onClick={() => router.push('/roundtable')}
+            size="small"
           >
             返回
           </Button>
-          <Typography variant="h5">{discussion.title}</Typography>
+          <Typography variant="h5" sx={{ wordBreak: 'break-word' }}>{discussion.title}</Typography>
           <Chip
             label={discussion.status === 'completed' ? '已完成' : discussion.status === 'processing' ? '处理中' : '失败'}
             color={discussion.status === 'completed' ? 'success' : discussion.status === 'processing' ? 'primary' : 'error'}
@@ -160,6 +161,7 @@ export default function DiscussionDetailPage() {
           <Button
             startIcon={<RefreshIcon />}
             onClick={fetchDiscussion}
+            size="small"
           >
             刷新
           </Button>
@@ -188,7 +190,7 @@ export default function DiscussionDetailPage() {
                 variant="outlined"
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.50',
+                  bgcolor: 'transparent',
                   maxHeight: 400,
                   overflow: 'auto'
                 }}

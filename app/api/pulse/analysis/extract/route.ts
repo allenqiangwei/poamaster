@@ -64,13 +64,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch existing entries to avoid duplicate extraction
+    const existingEntries = await prisma.pulseEntry.findMany({
+      where: { projectId: report.projectId, deletedAt: null },
+      select: { dimension: true, title: true, evidenceCurrent: true },
+    });
+    const existingForAI = existingEntries.map(e => ({
+      dimension: e.dimension,
+      title: e.title,
+      evidence: e.evidenceCurrent,
+    }));
+
     const result = await extractFromReport(
       parsedText,
       report.project.name,
       report.reportType,
       report.reportDate.toISOString().split('T')[0],
       report.fileName,
-      model || undefined
+      model || undefined,
+      existingForAI
     );
 
     const session = await prisma.pulseAnalysisSession.create({

@@ -109,20 +109,23 @@ function buildSearchQueries(topic: InsightTopic): string[] {
   return queries.slice(0, 3);
 }
 
+/** Max age for search results in days. Results older than this are filtered out. */
+const MAX_RESULT_AGE_DAYS = 90; // 3 months
+
 /**
- * Check if a search result date is within the last 7 days.
- * If no date is available, the result is kept (benefit of the doubt).
+ * Check if a search result date is within the allowed range.
+ * If no date is available, the result is kept (Serper tbs already constrains at search level).
  */
-function isWithinLast7Days(dateStr?: string): boolean {
+function isWithinDateRange(dateStr?: string): boolean {
   if (!dateStr) return true;
 
   try {
     const resultDate = new Date(dateStr);
     if (isNaN(resultDate.getTime())) return true;
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return resultDate >= sevenDaysAgo;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - MAX_RESULT_AGE_DAYS);
+    return resultDate >= cutoff;
   } catch {
     return true;
   }
@@ -158,6 +161,7 @@ export async function searchTopic(topic: InsightTopic): Promise<SearchResult[]> 
           gl: 'cn',
           hl: 'zh-cn',
           num: 10,
+          tbs: 'qdr:m3', // Restrict to past 3 months
         }),
       });
 
@@ -190,7 +194,7 @@ export async function searchTopic(topic: InsightTopic): Promise<SearchResult[]> 
   }
 
   // Filter out results older than 7 days
-  const recentResults = allResults.filter((r) => isWithinLast7Days(r.date));
+  const recentResults = allResults.filter((r) => isWithinDateRange(r.date));
 
   return recentResults;
 }
@@ -426,6 +430,7 @@ export async function searchWithCombo(
           gl: 'cn',
           hl: 'zh-cn',
           num: 10,
+          tbs: 'qdr:m3', // Restrict to past 3 months
         }),
       });
 
@@ -458,7 +463,7 @@ export async function searchWithCombo(
   }
 
   // Filter out results older than 7 days
-  const recentResults = allResults.filter((r) => isWithinLast7Days(r.date));
+  const recentResults = allResults.filter((r) => isWithinDateRange(r.date));
 
   // Filter out URLs already used in recent cards (Layer 1 dedup)
   let usedUrls = await getRecentlyUsedUrls(7);

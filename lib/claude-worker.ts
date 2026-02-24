@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { prisma } from '@/lib/prisma';
+import { loadCooSystemPrompt } from '@/lib/coo-memory/loader';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -8,7 +9,7 @@ const CLAUDE_PATH = '/opt/homebrew/bin/claude';
 const DEFAULT_MODEL = 'sonnet';
 const MAX_TURNS = '15';
 const TIMEOUT_MS = 300000; // 5 minutes
-const SYSTEM_PROMPT =
+const FALLBACK_SYSTEM_PROMPT =
   '你是 POA Master 的 AI 助手。直接回答用户的问题，不要使用 AskUserQuestion 工具，不要反问用户。如果信息不足，做出合理假设后直接给出答案。用中文回答。';
 
 // ---------------------------------------------------------------------------
@@ -99,14 +100,22 @@ async function processJob(
     data: { status: 'processing', progress: '正在思考...' },
   });
 
-  // 2. Build CLI args
+  // 2. Load COO memory-enhanced system prompt
+  let systemPrompt = FALLBACK_SYSTEM_PROMPT;
+  try {
+    systemPrompt = await loadCooSystemPrompt();
+  } catch (err) {
+    console.warn('[claude-worker] Failed to load COO memory, using fallback:', err);
+  }
+
+  // 3. Build CLI args
   const baseArgs = [
     '-p', prompt,
     '--output-format', 'stream-json',
     '--verbose',
     '--max-turns', MAX_TURNS,
     '--model', DEFAULT_MODEL,
-    '--append-system-prompt', SYSTEM_PROMPT,
+    '--append-system-prompt', systemPrompt,
     '--permission-mode', 'bypassPermissions',
   ];
 

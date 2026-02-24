@@ -53,21 +53,51 @@ export async function GET(req: NextRequest) {
     where: { isResolved: false, detectedAt: { gte: since } },
   });
 
-  // Trend data (daily totals)
-  const dailyPulses = await prisma.teamPulse.groupBy({
-    by: ['date'],
-    where: { date: { gte: since } },
-    _sum: { messageCount: true, activeUserCount: true },
-    _avg: { sentimentScore: true },
-    orderBy: { date: 'asc' },
-  });
+  // Trend data: query FeishuMessage directly for 7-day message counts
+  // (TeamPulse records only exist for days when analysis ran, so they're incomplete)
+  const trendDays: Array<{ date: string; messages: number; activeUsers: number; sentiment: number | null }> = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    dayStart.setDate(dayStart.getDate() - i);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
 
-  const trend = dailyPulses.map(d => ({
-    date: d.date,
-    messages: d._sum.messageCount || 0,
-    activeUsers: d._sum.activeUserCount || 0,
-    sentiment: d._avg.sentimentScore !== null ? Math.round(d._avg.sentimentScore! * 100) / 100 : null,
-  }));
+    const [msgAgg, pulseRecord] = await Promise.all([
+      prisma.feishuMessage.groupBy({
+        by: ['chatId'],
+        where: { timestamp: { gte: dayStart, lt: dayEnd } },
+        _count: true,
+      }),
+      prisma.teamPulse.aggregate({
+        where: { date: dayStart },
+        _avg: { sentimentScore: true },
+        _sum: { activeUserCount: true },
+      }),
+    ]);
+
+    const totalMessages = msgAgg.reduce((sum, g) => sum + g._count, 0);
+    // Count unique senders for active users when no pulse data
+    let activeUsers = pulseRecord._sum.activeUserCount || 0;
+    if (activeUsers === 0 && totalMessages > 0) {
+      const senders = await prisma.feishuMessage.findMany({
+        where: { timestamp: { gte: dayStart, lt: dayEnd } },
+        select: { senderName: true },
+        distinct: ['senderName'],
+      });
+      activeUsers = senders.length;
+    }
+
+    trendDays.push({
+      date: dayStart.toISOString(),
+      messages: totalMessages,
+      activeUsers,
+      sentiment: pulseRecord._avg.sentimentScore !== null
+        ? Math.round(pulseRecord._avg.sentimentScore! * 100) / 100
+        : null,
+    });
+  }
+  const trend = trendDays;
 
   return NextResponse.json({
     chatHealth: chatHealth.sort((a, b) => b.totalMessages - a.totalMessages),

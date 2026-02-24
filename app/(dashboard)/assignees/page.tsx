@@ -26,7 +26,8 @@ import {
   Snackbar,
   Card,
   CardContent,
-  CircularProgress
+  CircularProgress,
+  Chip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,8 +35,12 @@ import {
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
   AutoAwesome as AutoAwesomeIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  ArrowUpward as ArrowUpIcon,
+  ArrowDownward as ArrowDownIcon,
 } from '@mui/icons-material';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 
 interface Assignee {
   id: string;
@@ -54,6 +59,8 @@ interface TodoItem {
 
 export default function AssigneesPage() {
   const router = useRouter();
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -73,6 +80,10 @@ export default function AssigneesPage() {
     assigneeId: string | null;
     assigneeName: string;
   }>({ open: false, assigneeId: null, assigneeName: '' });
+
+  // Sort state — default: most tasks first
+  const [sortField, setSortField] = useState<string>('tasks');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // 默认负责人（强伟）的 ID
   const [defaultAssigneeId, setDefaultAssigneeId] = useState<string | null>(null);
@@ -356,30 +367,97 @@ export default function AssigneesPage() {
     }
   };
 
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
+
+  const sortedAssignees = [...assignees].sort((a, b) => {
+    let va: number, vb: number;
+    const pa = profiles[a.id];
+    const pb = profiles[b.id];
+
+    switch (sortField) {
+      case 'tasks':
+        va = a._count?.tasks || 0;
+        vb = b._count?.tasks || 0;
+        break;
+      case 'messages':
+        va = pa?.messageCount ?? -1;
+        vb = pb?.messageCount ?? -1;
+        break;
+      case 'chats':
+        va = pa?.activeChatCount ?? -1;
+        vb = pb?.activeChatCount ?? -1;
+        break;
+      case 'completion':
+        va = pa?.completionRate ?? -1;
+        vb = pb?.completionRate ?? -1;
+        break;
+      case 'signals':
+        va = pa?.unresolvedSignals ?? -1;
+        vb = pb?.unresolvedSignals ?? -1;
+        break;
+      case 'name':
+        return sortDir === 'asc'
+          ? a.name.localeCompare(b.name, 'zh-CN')
+          : b.name.localeCompare(a.name, 'zh-CN');
+      default:
+        va = a._count?.tasks || 0;
+        vb = b._count?.tasks || 0;
+    }
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+
+  const SortHeader = ({ field, label, align, sx: cellSx }: { field: string; label: string; align?: 'right' | 'left'; sx?: any }) => (
+    <TableCell
+      align={align}
+      sx={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...cellSx }}
+      onClick={() => handleSort(field)}
+    >
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        {label}
+        {sortField === field ? (
+          sortDir === 'asc' ? <ArrowUpIcon sx={{ fontSize: 16, opacity: 0.8 }} /> : <ArrowDownIcon sx={{ fontSize: 16, opacity: 0.8 }} />
+        ) : (
+          <ArrowDownIcon sx={{ fontSize: 16, opacity: 0.2 }} />
+        )}
+      </Box>
+    </TableCell>
+  );
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton
-          onClick={() => router.back()}
-          sx={{ mr: 2 }}
-          aria-label="返回"
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          负责人管理
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <IconButton
+            onClick={() => router.back()}
+            sx={{ mr: 1 }}
+            aria-label="返回"
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h4" sx={{ flexGrow: 1 }}>
+            负责人管理
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', ml: { xs: 0, sm: 'auto' } }}>
           <Button
             variant="outlined"
+            size="small"
             startIcon={<AutoAwesomeIcon />}
             onClick={handleGenerateTodos}
             disabled={assignees.length === 0}
           >
-            AI 生成待办事项
+            AI 生成待办
           </Button>
           <Button
             variant="contained"
+            size="small"
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
           >
@@ -388,35 +466,62 @@ export default function AssigneesPage() {
         </Box>
       </Box>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>姓名</TableCell>
-              <TableCell>飞书用户ID</TableCell>
-              <TableCell align="right">负责任务数</TableCell>
-              <TableCell align="right">本周消息</TableCell>
-              <TableCell align="right">活跃群数</TableCell>
-              <TableCell align="right">完成率</TableCell>
-              <TableCell align="right">活跃信号</TableCell>
-              <TableCell align="right">操作</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading ? (
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 4 }}>加载中...</Box>
+      ) : assignees.length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 4 }}>暂无负责人，点击"添加负责人"按钮创建</Box>
+      ) : isMobile ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {sortedAssignees.map((assignee) => (
+            <Card
+              key={assignee.id}
+              sx={{ cursor: 'pointer' }}
+              onClick={() => router.push(`/assignees/${assignee.id}`)}
+            >
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                  <Typography sx={{ color: 'primary.main', fontWeight: 600 }}>
+                    {assignee.name}
+                  </Typography>
+                  <Box onClick={(e) => e.stopPropagation()}>
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenDialog(assignee); }} color="primary">
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDelete(assignee.id, assignee.name); }} color="error">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Chip label={`${assignee._count?.tasks || 0} 任务`} size="small" variant="outlined" />
+                  {profiles[assignee.id]?.messageCount != null && (
+                    <Chip label={`${profiles[assignee.id].messageCount} 消息`} size="small" variant="outlined" />
+                  )}
+                  {profiles[assignee.id]?.completionRate != null && (
+                    <Chip label={`完成率 ${profiles[assignee.id].completionRate}%`} size="small" variant="outlined" />
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  加载中...
-                </TableCell>
+                <SortHeader field="name" label="姓名" />
+                <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>飞书用户ID</TableCell>
+                <SortHeader field="tasks" label="负责任务数" align="right" />
+                <SortHeader field="messages" label="本周消息" align="right" />
+                <SortHeader field="chats" label="活跃群数" align="right" sx={{ display: { xs: 'none', md: 'table-cell' } }} />
+                <SortHeader field="completion" label="完成率" align="right" />
+                <SortHeader field="signals" label="活跃信号" align="right" sx={{ display: { xs: 'none', md: 'table-cell' } }} />
+                <TableCell align="right">操作</TableCell>
               </TableRow>
-            ) : assignees.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} align="center">
-                  暂无负责人，点击"添加负责人"按钮创建
-                </TableCell>
-              </TableRow>
-            ) : (
-              assignees.map((assignee) => (
+            </TableHead>
+            <TableBody>
+              {sortedAssignees.map((assignee) => (
                 <TableRow
                   key={assignee.id}
                   hover
@@ -424,63 +529,38 @@ export default function AssigneesPage() {
                   onClick={() => router.push(`/assignees/${assignee.id}`)}
                 >
                   <TableCell>
-                    <Typography
-                      sx={{
-                        color: 'primary.main',
-                        '&:hover': { textDecoration: 'underline' }
-                      }}
-                    >
+                    <Typography sx={{ color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}>
                       {assignee.name}
                     </Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                     {assignee.feishuUserId || <em style={{ color: '#64748b' }}>未设置</em>}
                   </TableCell>
-                  <TableCell align="right">
-                    {assignee._count?.tasks || 0}
-                  </TableCell>
-                  <TableCell align="right">
-                    {profiles[assignee.id]?.messageCount ?? '-'}
-                  </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right">{assignee._count?.tasks || 0}</TableCell>
+                  <TableCell align="right">{profiles[assignee.id]?.messageCount ?? '-'}</TableCell>
+                  <TableCell align="right" sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                     {profiles[assignee.id]?.activeChatCount ?? '-'}
                   </TableCell>
                   <TableCell align="right">
-                    {profiles[assignee.id]?.completionRate != null
-                      ? `${profiles[assignee.id].completionRate}%`
-                      : '-'}
+                    {profiles[assignee.id]?.completionRate != null ? `${profiles[assignee.id].completionRate}%` : '-'}
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                     {profiles[assignee.id]?.unresolvedSignals ?? '-'}
                   </TableCell>
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenDialog(assignee);
-                      }}
-                      color="primary"
-                    >
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenDialog(assignee); }} color="primary">
                       <EditIcon />
                     </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(assignee.id, assignee.name);
-                      }}
-                      color="error"
-                    >
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDelete(assignee.id, assignee.name); }} color="error">
                       <DeleteIcon />
                     </IconButton>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>

@@ -512,6 +512,8 @@ model InsightCard {
   relatedData Json            @default("{}")
   feedback    Int?
   viewedAt    DateTime?
+  isCooFocus  Boolean         @default(false)
+  sharedAt    DateTime?
   createdAt   DateTime        @default(now())
   comboId     String?
   briefing    InsightBriefing @relation(fields: [briefingId], references: [id])
@@ -899,4 +901,26 @@ model KeyResult {
 
   @@index([objectiveId])
   @@index([ownerId])
+}
+
+// ============================================================
+// COO Memory System
+// ============================================================
+
+model CooMemoryCore {
+  id        String   @id @default(cuid())
+  content   String   // Markdown — COO's cumulative business cognition (~2000 chars)
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model CooMemoryEpisode {
+  id        String   @id @default(cuid())
+  date      DateTime @unique // One episode per day
+  snapshot  String   // Full-database snapshot (JSON string)
+  narrative String   // LLM-generated daily narrative (Markdown)
+  changes   String   // Day-over-day change detection (Markdown)
+  actions   String   // COO recommended actions (Markdown)
+  createdAt DateTime @default(now())
 }

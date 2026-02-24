@@ -289,15 +289,18 @@ export default function TodoPage() {
       <Box
         sx={{
           display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: 2,
           mb: 3
         }}
       >
         <Typography variant="h4">任务列表</Typography>
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
           <Button
             variant="outlined"
+            size="small"
             startIcon={<ReportIcon />}
             onClick={() => handleGenerateReport()}
           >
@@ -305,6 +308,7 @@ export default function TodoPage() {
           </Button>
           <Button
             variant="outlined"
+            size="small"
             startIcon={sending ? <CircularProgress size={20} /> : <SendIcon />}
             onClick={handleSendToFeishu}
             disabled={sending || sortedTasks.length === 0}
@@ -313,6 +317,7 @@ export default function TodoPage() {
           </Button>
           <Button
             variant="contained"
+            size="small"
             startIcon={<AddIcon />}
             onClick={() => router.push('/todo/new')}
           >
@@ -336,8 +341,8 @@ export default function TodoPage() {
         <Tab label="已推迟" value="POSTPONED" />
       </Tabs>
 
-      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-        <FormControl sx={{ minWidth: 250 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+        <FormControl sx={{ minWidth: { xs: '100%', sm: 250 } }}>
           <InputLabel>负责人</InputLabel>
           <Select
             multiple
@@ -367,7 +372,7 @@ export default function TodoPage() {
           </Select>
         </FormControl>
 
-        <FormControl sx={{ minWidth: 200 }}>
+        <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }}>
           <InputLabel>排序</InputLabel>
           <Select
             value={sortBy}

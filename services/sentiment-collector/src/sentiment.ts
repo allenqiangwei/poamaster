@@ -63,3 +63,28 @@ export function analyzeReview(
 
   return { sentimentScore, sentimentLabel, keyIssues };
 }
+
+/** Text-only sentiment analysis for social media mentions (no star rating). */
+export function analyzeMention(
+  content: string
+): { sentimentScore: number; sentimentLabel: string; keyIssues: string[] } {
+  const text = content.toLowerCase();
+
+  const textResult = analyzer.analyze(text, { extras: GAME_KEYWORDS });
+  const sentimentScore = Math.round(Math.max(-1, Math.min(1, textResult.comparative * 2)) * 100) / 100;
+
+  let sentimentLabel: string;
+  if (sentimentScore >= 0.15) sentimentLabel = 'POSITIVE';
+  else if (sentimentScore <= -0.15) sentimentLabel = 'NEGATIVE';
+  else sentimentLabel = 'NEUTRAL';
+
+  const keyIssues: string[] = [];
+  for (const pattern of ISSUE_PATTERNS) {
+    if (keyIssues.length >= 5) break;
+    if (pattern.keywords.some(kw => text.includes(kw))) {
+      keyIssues.push(pattern.tag);
+    }
+  }
+
+  return { sentimentScore, sentimentLabel, keyIssues };
+}

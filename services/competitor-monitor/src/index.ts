@@ -57,7 +57,7 @@ registerJob('detect-web-changes', '0 */6 * * *', async () => {
   await detectWebChanges();
 });
 
-registerJob('collect-competitor-news', '0 */4 * * *', async () => {
+registerJob('collect-competitor-news', '0 8,20 * * *', async () => {
   const { collectCompetitorNews } = await import('./collectors/news.js');
   await collectCompetitorNews();
 });

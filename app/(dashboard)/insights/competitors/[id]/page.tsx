@@ -105,13 +105,15 @@ interface PaginationInfo {
   total: number;
 }
 
-interface WebChange {
+interface NewsItem {
   id: string;
-  changeType: string;
+  type: 'news' | 'webchange';
   title: string;
   summary: string | null;
-  date: string;
   url: string | null;
+  source: string;
+  isHighImpact: boolean;
+  createdAt: string;
 }
 
 interface ChartData {
@@ -174,9 +176,12 @@ export default function CompetitorDetailPage() {
   const [reviewDays, setReviewDays] = useState<number>(30);
   const [reviewPage, setReviewPage] = useState(1);
 
-  // Web changes tab state
-  const [webChanges, setWebChanges] = useState<WebChange[]>([]);
-  const [webChangesLoading, setWebChangesLoading] = useState(false);
+  // News tab state
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsPagination, setNewsPagination] = useState<PaginationInfo>({ page: 1, totalPages: 1, total: 0 });
+  const [newsPage, setNewsPage] = useState(1);
+  const [newsDays, setNewsDays] = useState<number>(30);
 
   // ─── Data Fetching ─────────────────────────────────────────
 
@@ -187,12 +192,22 @@ export default function CompetitorDetailPage() {
       });
       const data = await res.json();
       if (data.success !== false) {
-        const d = data as DetailResponse;
-        setCompetitor(d.competitor);
-        setCurrentRating(d.currentRating);
-        setRatingTrend7d(d.ratingTrend);
-        setCharts(d.charts);
-        setVersions(d.versions);
+        setCompetitor(data.competitor);
+        setCurrentRating(data.currentRating);
+        setRatingTrend7d(data.ratingTrend);
+        // Transform sentiment from API object to chart array
+        const s = data.charts?.sentiment || {};
+        setCharts({
+          ratingTrend: data.charts?.ratingTrend || [],
+          sentiment: [
+            { name: '正面', value: s.positive || 0 },
+            { name: '中性', value: s.neutral || 0 },
+            { name: '负面', value: s.negative || 0 },
+          ],
+          reviewVolume: data.charts?.reviewVolume || [],
+          topTags: data.charts?.topTags || [],
+        });
+        setVersions(data.versions || []);
       }
     } catch {
       /* silently fail */
@@ -217,7 +232,19 @@ export default function CompetitorDetailPage() {
       });
       const data = await res.json();
       if (data.reviews) {
-        setReviews(data.reviews);
+        // Transform API fields to match ReviewItem interface
+        setReviews(data.reviews.map((r: any) => ({
+          id: r.id,
+          rating: r.rating,
+          title: r.title,
+          content: r.content || '',
+          sentiment: r.sentiment !== null
+            ? (r.sentiment > 0.3 ? 'positive' : r.sentiment < -0.3 ? 'negative' : 'neutral')
+            : 'neutral',
+          tags: r.tags || [],
+          date: r.reviewDate ? new Date(r.reviewDate).toISOString() : '',
+          platform: r.platform || '',
+        })));
         setReviewPagination(data.pagination);
       }
     } catch {
@@ -227,22 +254,31 @@ export default function CompetitorDetailPage() {
     }
   }, [id, reviewPage, reviewPlatform, reviewRating, reviewSentiment, reviewDays]);
 
-  const loadWebChanges = useCallback(async () => {
-    setWebChangesLoading(true);
+  const loadNews = useCallback(async () => {
+    setNewsLoading(true);
     try {
-      const res = await fetch(`/api/competitors/${id}/webchanges`, {
+      const params = new URLSearchParams({
+        competitorId: id,
+        days: String(newsDays),
+        page: String(newsPage),
+      });
+      const res = await fetch(`/api/competitors/news?${params}`, {
         credentials: 'include',
       });
       const data = await res.json();
-      if (data.changes) {
-        setWebChanges(data.changes);
+      if (data.items) {
+        setNewsItems(data.items.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : '',
+        })));
+        setNewsPagination(data.pagination);
       }
     } catch {
       /* silently fail */
     } finally {
-      setWebChangesLoading(false);
+      setNewsLoading(false);
     }
-  }, [id]);
+  }, [id, newsDays, newsPage]);
 
   // Initial load
   useEffect(() => {
@@ -256,12 +292,12 @@ export default function CompetitorDetailPage() {
     }
   }, [activeTab, loadReviews]);
 
-  // Load web changes when switching to tab 3
+  // Load news when switching to tab 3
   useEffect(() => {
     if (activeTab === 3) {
-      loadWebChanges();
+      loadNews();
     }
-  }, [activeTab, loadWebChanges]);
+  }, [activeTab, loadNews]);
 
   // ─── Helpers ───────────────────────────────────────────────
 
@@ -302,15 +338,24 @@ export default function CompetitorDetailPage() {
     }
   };
 
-  const getChangeTypeChip = (changeType: string) => {
-    switch (changeType) {
-      case 'major_update':
-        return <Chip label="重大更新" size="small" color="error" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />;
-      case 'content':
-        return <Chip label="内容变更" size="small" color="primary" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />;
-      default:
-        return <Chip label="基线" size="small" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />;
+  const getSourceChip = (type: string, source: string) => {
+    if (type === 'webchange') {
+      return source === 'major_update'
+        ? <Chip label="重大变更" size="small" color="error" sx={{ fontWeight: 600, fontSize: '0.75rem' }} />
+        : <Chip label="网页变更" size="small" sx={{ fontWeight: 600, fontSize: '0.75rem', bgcolor: alpha('#F59E0B', 0.1), color: '#D97706' }} />;
     }
+    return <Chip label="新闻" size="small" sx={{ fontWeight: 600, fontSize: '0.75rem', bgcolor: alpha(dt.accent.main, 0.1), color: dt.accent.dark }} />;
+  };
+
+  const formatRelativeTime = (dateStr: string) => {
+    const now = new Date();
+    const d = new Date(dateStr);
+    const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}天前`;
+    return formatFullDate(dateStr);
   };
 
   // ─── Loading State ─────────────────────────────────────────
@@ -434,7 +479,7 @@ export default function CompetitorDetailPage() {
         <Tab label="评分与情感" />
         <Tab label="评论列表" />
         <Tab label="版本更新" />
-        <Tab label="网页变更" />
+        <Tab label="新闻动态" />
       </Tabs>
 
       {/* ═══ Tab 0: Rating & Sentiment ═══ */}
@@ -518,8 +563,8 @@ export default function CompetitorDetailPage() {
                     >
                       {charts.sentiment.map((entry) => {
                         let color = SENTIMENT_COLORS.neutral;
-                        if (entry.name === 'positive') color = SENTIMENT_COLORS.positive;
-                        if (entry.name === 'negative') color = SENTIMENT_COLORS.negative;
+                        if (entry.name === '正面') color = SENTIMENT_COLORS.positive;
+                        if (entry.name === '负面') color = SENTIMENT_COLORS.negative;
                         return <Cell key={entry.name} fill={color} />;
                       })}
                     </Pie>
@@ -531,8 +576,7 @@ export default function CompetitorDetailPage() {
                         fontSize: 13,
                       }}
                       formatter={(value: any, name: any) => {
-                        const label = name === 'positive' ? '正面' : name === 'negative' ? '负面' : '中性';
-                        return `${label}: ${value}`;
+                        return [`${value}`, name];
                       }}
                     />
                     {/* Center label showing total */}
@@ -563,14 +607,13 @@ export default function CompetitorDetailPage() {
                 <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 1 }}>
                   {charts.sentiment.map((entry) => {
                     let color = SENTIMENT_COLORS.neutral;
-                    let label = '中性';
-                    if (entry.name === 'positive') { color = SENTIMENT_COLORS.positive; label = '正面'; }
-                    if (entry.name === 'negative') { color = SENTIMENT_COLORS.negative; label = '负面'; }
+                    if (entry.name === '正面') color = SENTIMENT_COLORS.positive;
+                    if (entry.name === '负面') color = SENTIMENT_COLORS.negative;
                     return (
                       <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color }} />
                         <Typography variant="caption" sx={{ color: dt.text.secondary }}>
-                          {label} {entry.value}
+                          {entry.name} {entry.value}
                         </Typography>
                       </Box>
                     );
@@ -686,8 +729,8 @@ export default function CompetitorDetailPage() {
                       onChange={(e) => { setReviewPlatform(e.target.value); setReviewPage(1); }}
                     >
                       <MenuItem value="all">全部</MenuItem>
-                      {competitor.appStoreId && <MenuItem value="APP_STORE">App Store</MenuItem>}
-                      {competitor.googlePlayId && <MenuItem value="GOOGLE_PLAY">Google Play</MenuItem>}
+                      {competitor.appStoreId && <MenuItem value="appstore">App Store</MenuItem>}
+                      {competitor.googlePlayId && <MenuItem value="googleplay">Google Play</MenuItem>}
                     </Select>
                   </FormControl>
                 </Box>
@@ -915,83 +958,117 @@ export default function CompetitorDetailPage() {
         </Box>
       )}
 
-      {/* ═══ Tab 3: Web Changes ═══ */}
+      {/* ═══ Tab 3: News Feed ═══ */}
       {activeTab === 3 && (
         <Box>
-          {webChangesLoading ? (
+          {/* Time range filter */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <ToggleButtonGroup
+              value={newsDays}
+              exclusive
+              onChange={(_, v) => { if (v !== null) { setNewsDays(v); setNewsPage(1); } }}
+              size="small"
+            >
+              <ToggleButton value={7} sx={{ px: 1.5, py: 0.25, fontSize: '0.75rem' }}>7天</ToggleButton>
+              <ToggleButton value={30} sx={{ px: 1.5, py: 0.25, fontSize: '0.75rem' }}>30天</ToggleButton>
+              <ToggleButton value={90} sx={{ px: 1.5, py: 0.25, fontSize: '0.75rem' }}>90天</ToggleButton>
+            </ToggleButtonGroup>
+            <Typography variant="body2" sx={{ color: dt.text.muted }}>
+              共 <Box component="span" sx={{ color: dt.text.primary, fontWeight: 600 }}>{newsPagination.total}</Box> 条
+            </Typography>
+          </Box>
+
+          {newsLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
               <CircularProgress size={32} />
             </Box>
-          ) : webChanges.length === 0 ? (
+          ) : newsItems.length === 0 ? (
             <Card>
               <CardContent sx={{ textAlign: 'center', py: 8 }}>
                 <Typography variant="h6" sx={{ color: dt.text.secondary, mb: 1 }}>
-                  暂无网页变更记录
+                  暂无新闻动态
                 </Typography>
                 <Typography variant="body2" sx={{ color: dt.text.muted }}>
-                  网页变更将在监控服务运行后自动检测
+                  新闻与网页变更将在采集后自动出现
                 </Typography>
               </CardContent>
             </Card>
           ) : (
-            webChanges.map((change, i) => (
-              <Box key={change.id} sx={{ display: 'flex', gap: 2, pb: 3 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 40 }}>
-                  <Box sx={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: '50%',
-                    bgcolor: change.changeType === 'major_update'
-                      ? dt.danger.main
-                      : change.changeType === 'content'
-                        ? dt.accent.main
-                        : dt.text.muted,
-                  }} />
-                  {i < webChanges.length - 1 && (
-                    <Box sx={{ width: 2, flex: 1, bgcolor: dt.border.default }} />
-                  )}
-                </Box>
-                <Card sx={{ flex: 1 }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                      <Typography variant="subtitle1" fontWeight={600} sx={{ color: dt.text.primary }}>
-                        {change.title}
-                      </Typography>
-                      {getChangeTypeChip(change.changeType)}
-                      <Typography variant="caption" color="text.secondary">
-                        {formatFullDate(change.date)}
+            <Stack spacing={1.5}>
+              {newsItems.map((item) => (
+                <Card
+                  key={item.id}
+                  sx={{
+                    borderLeft: item.isHighImpact ? `3px solid ${dt.danger.main}` : 'none',
+                  }}
+                >
+                  <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.75 }}>
+                      {getSourceChip(item.type, item.source)}
+                      {item.isHighImpact && (
+                        <Chip label="高影响" size="small" color="error" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                      )}
+                      <Typography variant="caption" sx={{ color: dt.text.muted, ml: 'auto' }}>
+                        {formatRelativeTime(item.createdAt)}
                       </Typography>
                     </Box>
-                    {change.summary && (
-                      <Typography
-                        variant="body2"
-                        sx={{ mt: 1, color: dt.text.secondary, lineHeight: 1.6 }}
-                      >
-                        {change.summary}
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        color: dt.text.primary,
+                        fontWeight: 600,
+                        mb: 0.5,
+                        ...(item.url && item.type === 'news' ? {
+                          cursor: 'pointer',
+                          '&:hover': { color: dt.accent.main },
+                        } : {}),
+                      }}
+                      onClick={() => {
+                        if (item.url && item.type === 'news') window.open(item.url, '_blank');
+                      }}
+                    >
+                      {item.title}
+                    </Typography>
+                    {item.summary && (
+                      <Typography variant="body2" sx={{ color: dt.text.secondary, lineHeight: 1.6 }}>
+                        {item.summary.length > 200 ? item.summary.slice(0, 200) + '...' : item.summary}
                       </Typography>
                     )}
-                    {change.url && (
+                    {item.url && (
                       <Typography
                         variant="caption"
                         component="a"
-                        href={change.url}
+                        href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         sx={{
                           display: 'inline-block',
-                          mt: 1,
+                          mt: 0.75,
                           color: dt.accent.main,
                           textDecoration: 'none',
                           '&:hover': { textDecoration: 'underline' },
                         }}
                       >
-                        查看页面
+                        {item.type === 'news' ? '查看原文' : '查看页面'}
                       </Typography>
                     )}
                   </CardContent>
                 </Card>
-              </Box>
-            ))
+              ))}
+            </Stack>
+          )}
+
+          {/* Pagination */}
+          {newsPagination.totalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Pagination
+                count={newsPagination.totalPages}
+                page={newsPage}
+                onChange={(_, value) => setNewsPage(value)}
+                color="primary"
+                shape="rounded"
+              />
+            </Box>
           )}
         </Box>
       )}

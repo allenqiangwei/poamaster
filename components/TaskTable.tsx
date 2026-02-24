@@ -8,20 +8,23 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   IconButton,
   Box,
   Typography,
-  Select,
-  MenuItem,
-  Chip
+  Chip,
+  Card,
+  CardContent,
+  alpha,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  CheckCircle as DoneIcon
+  CheckCircle as DoneIcon,
 } from '@mui/icons-material';
 import { TaskStatus } from '@prisma/client';
+import { designTokens as dt } from '@/lib/theme';
+import { useResponsive } from '@/hooks/useResponsive';
+import TaskStatusChip from './TaskStatusChip';
 
 interface Task {
   id: string;
@@ -45,12 +48,22 @@ export default function TaskTable({
   onEdit,
   onDelete,
   onStatusChange,
-  onMarkDone
+  onMarkDone,
 }: TaskTableProps) {
+  const { isMobile } = useResponsive();
+
   const isOverdue = (dueDate: string | null, status: TaskStatus) => {
-    if (!dueDate || status === 'DONE' || status === 'CANCELLED') {
-      return false;
-    }
+    if (!dueDate || status === 'DONE' || status === 'CANCELLED') return false;
+    const date = new Date(dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const taskDate = new Date(date);
+    taskDate.setHours(0, 0, 0, 0);
+    return taskDate < today;
+  };
+
+  const getRowColor = (dueDate: string | null, status: TaskStatus) => {
+    if (!dueDate || status === 'DONE' || status === 'CANCELLED') return 'transparent';
 
     const date = new Date(dueDate);
     const today = new Date();
@@ -58,52 +71,17 @@ export default function TaskTable({
     const taskDate = new Date(date);
     taskDate.setHours(0, 0, 0, 0);
 
-    return taskDate < today;
-  };
+    if (taskDate < today) return alpha(dt.danger.main, 0.08);
+    if (isToday(date)) return alpha(dt.danger.main, 0.05);
 
-  /**
-   * Get row background color based on due date
-   * Visual hierarchy:
-   * - Overdue (past due): Dark red (#ffcdd2) + "逾期" chip
-   * - Due today: Light red (#ffebee)
-   * - Due within 2 days: Orange (#ffe0b2)
-   * - Due within 7 days: Yellow (#fff9c4)
-   * - Other tasks: Transparent
-   */
-  const getRowColor = (dueDate: string | null, status: TaskStatus) => {
-    if (!dueDate) return 'transparent';
-
-    // Don't highlight completed or cancelled tasks
-    if (status === 'DONE' || status === 'CANCELLED') {
-      return 'transparent';
-    }
-
-    const date = new Date(dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
-    const taskDate = new Date(date);
-    taskDate.setHours(0, 0, 0, 0);
-
-    // Overdue tasks (past due date) - darker red
-    if (taskDate < today) {
-      return '#ffcdd2'; // Stronger red for overdue
-    }
-
-    // Due today - light red
-    if (isToday(date)) {
-      return '#ffebee';
-    }
-
-    // Due within 2 days (tomorrow or day after) - orange
     const twoDaysLater = addDays(today, 2);
     if (isWithinInterval(date, { start: addDays(today, 1), end: twoDaysLater })) {
-      return '#ffe0b2'; // Orange background
+      return alpha(dt.warning.main, 0.06);
     }
 
-    // Due within 7 days (3-7 days) - yellow
     const sevenDaysLater = addDays(today, 7);
     if (isWithinInterval(date, { start: addDays(today, 3), end: sevenDaysLater })) {
-      return '#fff9c4'; // Yellow background
+      return alpha(dt.warning.main, 0.03);
     }
 
     return 'transparent';
@@ -112,21 +90,75 @@ export default function TaskTable({
   if (tasks.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 8 }}>
-        <Typography variant="h6" color="text.secondary">
-          📋
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
+        <Typography variant="body1" sx={{ color: dt.text.muted }}>
           暂无任务
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: dt.text.muted, mt: 1 }}>
           点击"添加任务"开始使用
         </Typography>
       </Box>
     );
   }
 
+  if (isMobile) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {tasks.map((task) => (
+          <Card
+            key={task.id}
+            sx={{
+              bgcolor: getRowColor(task.dueDate, task.status),
+            }}
+          >
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: dt.text.primary, mb: 0.5 }}>
+                {task.title}
+              </Typography>
+              {task.dod && (
+                <Typography variant="caption" sx={{ color: dt.text.muted, fontStyle: 'italic', display: 'block', mb: 1 }}>
+                  {task.dod}
+                </Typography>
+              )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                {task.assignee && (
+                  <Chip label={task.assignee.name} size="small" variant="outlined" />
+                )}
+                {task.dueDate && (
+                  <Typography variant="caption" sx={{ color: dt.text.muted, fontFeatureSettings: '"tnum"' }}>
+                    {format(new Date(task.dueDate), 'MM-dd HH:mm')}
+                  </Typography>
+                )}
+                {isOverdue(task.dueDate, task.status) && (
+                  <Chip label="逾期" color="error" size="small" sx={{ fontWeight: 700, height: 22 }} />
+                )}
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <TaskStatusChip
+                  status={task.status}
+                  interactive
+                  onChange={(s) => onStatusChange(task.id, s)}
+                />
+                <Box>
+                  <IconButton size="small" onClick={() => onMarkDone(task.id)} title="标记完成">
+                    <DoneIcon fontSize="small" sx={{ color: dt.success.main }} />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => onEdit(task)} title="编辑">
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => onDelete(task.id)} title="删除" sx={{ color: dt.danger.main }}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
+    );
+  }
+
   return (
-    <TableContainer component={Paper}>
+    <TableContainer>
       <Table>
         <TableHead>
           <TableRow>
@@ -145,20 +177,20 @@ export default function TaskTable({
             >
               <TableCell>
                 <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: dt.text.primary }}>
                     {task.title}
                   </Typography>
                   {task.dod && (
                     <Typography
                       variant="caption"
-                      color="text.secondary"
                       sx={{
                         display: 'block',
                         mt: 0.5,
+                        color: dt.text.muted,
                         fontStyle: 'italic',
                       }}
                     >
-                      完成标准: {task.dod}
+                      {task.dod}
                     </Typography>
                   )}
                 </Box>
@@ -166,58 +198,36 @@ export default function TaskTable({
               <TableCell>{task.assignee?.name || '-'}</TableCell>
               <TableCell>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <span>
+                  <Typography variant="body2" sx={{ fontFeatureSettings: '"tnum"' }}>
                     {task.dueDate
                       ? format(new Date(task.dueDate), 'yyyy-MM-dd HH:mm')
                       : '-'}
-                  </span>
+                  </Typography>
                   {isOverdue(task.dueDate, task.status) && (
                     <Chip
                       label="逾期"
                       color="error"
                       size="small"
-                      sx={{ fontWeight: 'bold' }}
+                      sx={{ fontWeight: 700, height: 22 }}
                     />
                   )}
                 </Box>
               </TableCell>
               <TableCell>
-                <Select
-                  value={task.status}
-                  onChange={(e) =>
-                    onStatusChange(task.id, e.target.value as TaskStatus)
-                  }
-                  size="small"
-                  variant="standard"
-                >
-                  <MenuItem value="TODO">待办</MenuItem>
-                  <MenuItem value="IN_PROGRESS">进行中</MenuItem>
-                  <MenuItem value="DONE">已完成</MenuItem>
-                  <MenuItem value="CANCELLED">已取消</MenuItem>
-                  <MenuItem value="POSTPONED">已推迟</MenuItem>
-                </Select>
+                <TaskStatusChip
+                  status={task.status}
+                  interactive
+                  onChange={(s) => onStatusChange(task.id, s)}
+                />
               </TableCell>
               <TableCell align="right">
-                <IconButton
-                  size="small"
-                  onClick={() => onMarkDone(task.id)}
-                  title="标记完成"
-                >
-                  <DoneIcon fontSize="small" />
+                <IconButton size="small" onClick={() => onMarkDone(task.id)} title="标记完成">
+                  <DoneIcon fontSize="small" sx={{ color: dt.success.main }} />
                 </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => onEdit(task)}
-                  title="编辑"
-                >
+                <IconButton size="small" onClick={() => onEdit(task)} title="编辑">
                   <EditIcon fontSize="small" />
                 </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => onDelete(task.id)}
-                  title="删除"
-                  color="error"
-                >
+                <IconButton size="small" onClick={() => onDelete(task.id)} title="删除" sx={{ color: dt.danger.main }}>
                   <DeleteIcon fontSize="small" />
                 </IconButton>
               </TableCell>

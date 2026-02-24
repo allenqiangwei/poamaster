@@ -24,8 +24,10 @@
     "node-cron": "^4.2.1",
     "openai": "^6.16.0",
     "pdfjs-dist": "^5.4.624",
+    "puppeteer": "^24.37.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.7.0",
     "sentiment": "^5.0.2",
     "undici": "^7.19.2",
@@ -33,6 +35,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
@@ -41,8 +46,10 @@
     "@types/sentiment": "^5.0.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsdom": "^28.1.0",
     "prisma": "^6.19.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

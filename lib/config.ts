@@ -7,7 +7,7 @@ import { encrypt, decrypt } from './crypto';
  */
 
 // 敏感配置 key 列表（需要加密存储）
-const SENSITIVE_KEYS = ['openai.apiKey', 'feishu.appSecret', 'feishu.cookie'];
+const SENSITIVE_KEYS = ['openai.apiKey', 'feishu.appSecret', 'feishu.cookie', 'serper.apiKey', 'x.password', 'x.email'];
 
 /**
  * 检查是否为敏感配置

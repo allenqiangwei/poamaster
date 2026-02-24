@@ -277,9 +277,9 @@ export default function TopicsPage() {
             <Box
               sx={{
                 display: 'flex',
-                alignItems: 'flex-end',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'stretch', sm: 'flex-end' },
                 justifyContent: 'space-between',
-                flexWrap: 'wrap',
                 gap: 2,
               }}
             >
@@ -306,8 +306,10 @@ export default function TopicsPage() {
 
               <Button
                 variant="contained"
+                size="small"
                 startIcon={<AddIcon />}
                 onClick={() => setAddOpen(true)}
+                sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}
               >
                 添加话题
               </Button>

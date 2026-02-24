@@ -7,10 +7,6 @@ import {
   Paper,
   Typography,
   IconButton,
-  List,
-  ListItemButton,
-  ListItemText,
-  ListItemSecondaryAction,
   TextField,
   CircularProgress,
   Badge,
@@ -419,8 +415,8 @@ export default function ChatBubble() {
           invisible={unreadCount === 0}
           sx={{
             position: 'fixed',
-            bottom: 24,
-            right: 24,
+            bottom: { xs: 16, sm: 24 },
+            right: { xs: 16, sm: 24 },
             zIndex: 1300,
             '& .MuiBadge-badge': {
               top: 6,
@@ -452,14 +448,14 @@ export default function ChatBubble() {
         <Paper
           sx={{
             position: 'fixed',
-            bottom: 24,
-            right: 24,
-            width: 400,
-            height: 520,
+            bottom: { xs: 0, sm: 24 },
+            right: { xs: 0, sm: 24 },
+            width: { xs: '100vw', sm: 400 },
+            height: { xs: '100dvh', sm: 520 },
             zIndex: 1300,
             display: open ? 'flex' : 'none',
             flexDirection: 'column',
-            borderRadius: 3,
+            borderRadius: { xs: 0, sm: 3 },
             overflow: 'hidden',
             boxShadow: `0 8px 32px ${alpha('#0f172a', 0.12)}`,
           }}
@@ -494,20 +490,28 @@ export default function ChatBubble() {
           {view === 'threads' && (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Box sx={{ p: 1.5 }}>
-                <ListItemButton
+                <Box
                   onClick={startNewChat}
+                  role="button"
+                  tabIndex={0}
                   sx={{
-                    borderRadius: 2,
-                    border: `1px dashed ${dt.border.strong}`,
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     gap: 1,
+                    py: 1.25,
+                    borderRadius: 2,
+                    border: `1px dashed ${dt.border.strong}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    '&:hover': { bgcolor: alpha(dt.accent.main, 0.05), borderColor: dt.accent.main },
                   }}
                 >
-                  <AddIcon fontSize="small" color="primary" />
-                  <Typography variant="body2" color="primary" fontWeight={600}>
+                  <AddIcon fontSize="small" sx={{ color: dt.accent.main }} />
+                  <Typography variant="body2" sx={{ color: dt.accent.main, fontWeight: 600 }}>
                     新对话
                   </Typography>
-                </ListItemButton>
+                </Box>
               </Box>
               <Divider />
               <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -520,44 +524,95 @@ export default function ChatBubble() {
                     还没有对话，开始一个吧
                   </Typography>
                 ) : (
-                  <List>
+                  <Box sx={{ px: 1, py: 0.5 }}>
                     {threads.map((t) => (
-                      <ListItemButton key={t.chatId} onClick={() => openThread(t)} sx={{ pr: 6 }}>
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {t.hasUnread && (
-                                <Box
-                                  sx={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    backgroundColor: dt.danger.main,
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              )}
-                              <Typography variant="body2" fontWeight={600} noWrap>
-                                {t.title}
-                              </Typography>
-                            </Box>
-                          }
-                          secondary={`${t.preview} · ${formatTime(t.lastActiveAt)}`}
-                          secondaryTypographyProps={{ variant: 'caption', noWrap: true }}
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            size="small"
-                            onClick={(e) => deleteThread(t.chatId, e)}
-                            sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItemButton>
+                      <Box
+                        key={t.chatId}
+                        onClick={() => openThread(t)}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 1.5,
+                          px: 1.5,
+                          py: 1.25,
+                          borderRadius: 2,
+                          cursor: 'pointer',
+                          transition: 'background 0.15s',
+                          '&:hover': { bgcolor: alpha(dt.accent.main, 0.05) },
+                          '&:active': { bgcolor: alpha(dt.accent.main, 0.1) },
+                        }}
+                      >
+                        {/* Unread dot */}
+                        <Box sx={{ width: 8, pt: '7px', flexShrink: 0 }}>
+                          {t.hasUnread && (
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                bgcolor: dt.danger.main,
+                                boxShadow: `0 0 6px ${alpha(dt.danger.main, 0.4)}`,
+                              }}
+                            />
+                          )}
+                        </Box>
+                        {/* Content */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                            <Typography
+                              variant="body2"
+                              noWrap
+                              sx={{
+                                flex: 1,
+                                fontWeight: t.hasUnread ? 700 : 500,
+                                color: dt.text.primary,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {t.title}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: dt.text.muted,
+                                flexShrink: 0,
+                                fontSize: '0.7rem',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {formatTime(t.lastActiveAt)}
+                            </Typography>
+                          </Box>
+                          {t.preview && (
+                            <Typography
+                              variant="caption"
+                              noWrap
+                              sx={{
+                                color: dt.text.muted,
+                                display: 'block',
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              {t.preview}
+                            </Typography>
+                          )}
+                        </Box>
+                        {/* Delete */}
+                        <IconButton
+                          size="small"
+                          onClick={(e) => deleteThread(t.chatId, e)}
+                          sx={{
+                            opacity: 0.35,
+                            flexShrink: 0,
+                            mt: '-2px',
+                            '&:hover': { opacity: 1, color: dt.danger.main },
+                          }}
+                        >
+                          <DeleteIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Box>
                     ))}
-                  </List>
+                  </Box>
                 )}
               </Box>
             </Box>

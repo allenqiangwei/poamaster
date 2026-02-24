@@ -337,19 +337,18 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
         <IconButton onClick={() => router.push('/pulse')}>
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4" sx={{ flex: 1 }}>
+        <Typography variant="h4" sx={{ flex: 1, fontSize: { xs: '1.25rem', sm: '1.5rem', md: '2rem' } }} noWrap>
           {project.name}
         </Typography>
         <IconButton
           size="small"
           onClick={handleEditClick}
-          sx={{ ml: 1 }}
         >
           <EditIcon />
         </IconButton>
@@ -360,16 +359,20 @@ export default function ProjectDetailPage() {
         >
           <DeleteIcon />
         </IconButton>
+      </Box>
+      <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
         <Button
           variant="outlined"
+          size="small"
           startIcon={<AutoAwesomeIcon />}
           onClick={handleAISummary}
           disabled={summaryLoading || !project.entries || project.entries.length === 0}
         >
-          {summaryLoading ? <CircularProgress size={20} /> : 'AI 总结'}
+          {summaryLoading ? <CircularProgress size={16} /> : 'AI 总结'}
         </Button>
         <Button
           variant="outlined"
+          size="small"
           startIcon={<UploadIcon />}
           onClick={() => router.push(`/pulse/${projectId}/upload`)}
         >
@@ -377,6 +380,7 @@ export default function ProjectDetailPage() {
         </Button>
         <Button
           variant="contained"
+          size="small"
           startIcon={<AddIcon />}
           onClick={() => router.push(`/pulse/${projectId}/entries/new`)}
         >
@@ -402,8 +406,8 @@ export default function ProjectDetailPage() {
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <FormControl sx={{ minWidth: 200 }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
+          <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }} size="small">
             <InputLabel>维度筛选</InputLabel>
             <Select
               value={dimensionFilter}
@@ -420,9 +424,10 @@ export default function ProjectDetailPage() {
           </FormControl>
           <TextField
             placeholder="搜索条目..."
+            size="small"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            sx={{ flex: 1, maxWidth: 400 }}
+            sx={{ flex: 1, maxWidth: { sm: 400 }, width: { xs: '100%' } }}
           />
         </Box>
       </Paper>
@@ -465,8 +470,8 @@ export default function ProjectDetailPage() {
                       variant="outlined"
                       sx={{ p: 2, mb: 1, '&:last-child': { mb: 0 } }}
                     >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Box sx={{ flex: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography variant="subtitle1" fontWeight="bold">
                             {entry.title}
                           </Typography>
@@ -483,18 +488,19 @@ export default function ProjectDetailPage() {
                           >
                             {entry.evidenceCurrent}
                           </Typography>
-                          <Box sx={{ mt: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
+                          <Box sx={{ mt: 1, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                             <Chip
                               label={entry.sourceCurrent.fileName}
                               size="small"
                               variant="outlined"
+                              sx={{ maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
                             />
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
                               更新于 {new Date(entry.updatedAt).toLocaleString('zh-CN')}
                             </Typography>
                           </Box>
                         </Box>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                           <IconButton
                             size="small"
                             onClick={() => router.push(`/pulse/${projectId}/entries/${entry.id}`)}

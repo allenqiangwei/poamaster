@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Paper,
   Typography,
   TextField,
@@ -232,14 +231,14 @@ export default function EditTaskPage({ params }: TaskPageProps) {
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
+      <Box sx={{ maxWidth: 900, mx: 'auto' }}>
         <Typography>加载中...</Typography>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 900, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton
           onClick={() => router.back()}
@@ -391,6 +390,6 @@ export default function EditTaskPage({ params }: TaskPageProps) {
           </Button>
         </DialogActions>
       </Dialog>
-    </Container>
+    </Box>
   );
 }

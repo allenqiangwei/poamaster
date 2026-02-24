@@ -1264,7 +1264,7 @@ export default function InsightsPage() {
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                             <TrendingIcon sx={{ color: COLORS.accent, fontSize: 18 }} />
                             <Typography variant="subtitle2" sx={{ color: COLORS.textPrimary, fontWeight: 700 }}>
-                              团队健康度
+                              项目热度
                             </Typography>
                           </Box>
                           {data.projectHealth.map((p, i) => (

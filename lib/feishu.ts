@@ -125,6 +125,85 @@ export async function sendFeishuTextMessage(text: string): Promise<void> {
 }
 
 /**
+ * Upload a file to Feishu for sending as a message attachment.
+ * Uses the im/v1/files endpoint with multipart form data.
+ * Returns the file_key for use in sendFeishuFileMessage.
+ */
+export async function uploadFeishuFile(
+  buffer: Buffer,
+  fileName: string,
+  fileType: 'pdf' | 'doc' | 'xls' | 'ppt' | 'image' | 'media' | 'opus',
+): Promise<string> {
+  const accessToken = await getFeishuAccessToken();
+
+  const formData = new FormData();
+  formData.append('file_type', fileType);
+  formData.append('file_name', fileName);
+  formData.append('file', new Blob([buffer]), fileName);
+
+  const res = await fetch(
+    'https://open.feishu.cn/open-apis/im/v1/files',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`上传飞书文件失败: HTTP ${res.status} - ${errorText.substring(0, 200)}`);
+  }
+
+  const data = await res.json();
+
+  if (data.code !== 0) {
+    throw new Error(`上传飞书文件失败: ${data.msg || JSON.stringify(data)} (code: ${data.code})`);
+  }
+
+  return data.data.file_key;
+}
+
+/**
+ * Send a file message to a Feishu chat.
+ */
+export async function sendFeishuFileMessage(
+  chatId: string,
+  fileKey: string,
+): Promise<void> {
+  const accessToken = await getFeishuAccessToken();
+
+  const res = await fetch(
+    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        receive_id: chatId,
+        msg_type: 'file',
+        content: JSON.stringify({ file_key: fileKey }),
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`发送飞书文件消息失败: HTTP ${res.status} - ${errorText.substring(0, 200)}`);
+  }
+
+  const data = await res.json();
+
+  if (data.code !== 0) {
+    throw new Error(`发送飞书文件消息失败: ${data.msg || JSON.stringify(data)} (code: ${data.code})`);
+  }
+}
+
+/**
  * 通过 Webhook 发送飞书通知（用于圆桌会议等功能）
  */
 export async function sendFeishuNotification(

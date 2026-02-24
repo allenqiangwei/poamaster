@@ -14,7 +14,7 @@ import type { InsightTopic, KeywordCombo } from '@prisma/client';
 // ============================================================
 
 /**
- * 为指定话题生成 1-2 个新的关键词组合。
+ * 为指定话题生成 2-3 个新的关键词组合。
  * 使用 LLM 根据已有组合（正面/负面示例）生成不同角度的新组合。
  */
 export async function generateCombosForTopic(
@@ -45,7 +45,7 @@ export async function generateCombosForTopic(
     const client = await getOpenAIClient();
     const model = await getOpenAIModel();
 
-    const prompt = `你是一个专业的信息检索专家。请为以下话题生成 1-2 个新的搜索关键词组合。
+    const prompt = `你是一个专业的信息检索专家。请为以下话题生成 2-3 个新的搜索关键词组合。
 
 话题名称：${topic.name}
 话题关键词：${topic.keywords.join('、')}
@@ -123,12 +123,13 @@ ${allCurrentCombos.length > 0 ? `以下是当前已有的组合（请不要重�
 // ============================================================
 
 /**
- * 为指定话题选择最佳的关键词组合用于研究。
+ * 为指定话题选择关键词组合用于研究。
  *
- * 策略：
- *  - 选一个得分最高的 active 组合（24h 内未使用过）
- *  - 选一个 new 状态的组合（保持新鲜度）
- *  - 如果以上都没有，回退到任意非 retired 组合
+ * 策略（轮换优先）：
+ *  - 48h 冷却期：刚使用过的组合不会被再次选中
+ *  - 加权随机选择：得分越高被选中概率越大，但不保证每次选最高分
+ *  - 总是选 1 个 new 状态的组合（保持探索）
+ *  - 回退：如果以上都没有，放宽冷却期
  */
 export async function selectCombosForResearch(
   topicId: string
@@ -136,27 +137,27 @@ export async function selectCombosForResearch(
   console.log(`[KeywordEngine] 为话题 ${topicId} 选择研究组合...`);
 
   const selected: KeywordCombo[] = [];
-  const twentyFourHoursAgo = new Date();
-  twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+  const fortyEightHoursAgo = new Date();
+  fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
 
-  // 策略 1: 最高分活跃组合（24h 内未使用）
-  const bestActive = await prisma.keywordCombo.findFirst({
+  // 策略 1: 从冷却期外的活跃组合中加权随机选一个
+  const activeCandidates = await prisma.keywordCombo.findMany({
     where: {
       topicId,
       status: 'active',
       OR: [
         { lastUsedAt: null },
-        { lastUsedAt: { lt: twentyFourHoursAgo } },
+        { lastUsedAt: { lt: fortyEightHoursAgo } },
       ],
     },
-    orderBy: { score: 'desc' },
   });
 
-  if (bestActive) {
-    selected.push(bestActive);
+  if (activeCandidates.length > 0) {
+    const pick = weightedRandomPick(activeCandidates);
+    selected.push(pick);
   }
 
-  // 策略 2: 一个 new 状态的组合
+  // 策略 2: 一个 new 状态的组合（探索新方向）
   const freshCombo = await prisma.keywordCombo.findFirst({
     where: {
       topicId,
@@ -170,7 +171,17 @@ export async function selectCombosForResearch(
     selected.push(freshCombo);
   }
 
-  // 回退：如果还是空的，找任意非 retired 组合
+  // 策略 3: 如果策略1没选到，从冷却期外的 active 中再选一个不同的
+  if (selected.length < 2 && activeCandidates.length > 1) {
+    const remaining = activeCandidates.filter(
+      (c) => !selected.some((s) => s.id === c.id)
+    );
+    if (remaining.length > 0) {
+      selected.push(weightedRandomPick(remaining));
+    }
+  }
+
+  // 回退：如果还是空的，放宽冷却期，找任意非 retired 组合
   if (selected.length === 0) {
     const fallback = await prisma.keywordCombo.findFirst({
       where: {
@@ -189,6 +200,102 @@ export async function selectCombosForResearch(
     `[KeywordEngine] 选中 ${selected.length} 个组合: ${selected.map((s) => s.keywords.join('+')).join(', ')}`
   );
   return selected;
+}
+
+/**
+ * 从候选组合中按 score 加权随机选择一个。
+ * 得分越高被选中概率越大，但不保证每次选最高分，
+ * 从而实现轮换效果。
+ */
+function weightedRandomPick(combos: KeywordCombo[]): KeywordCombo {
+  if (combos.length === 1) return combos[0];
+
+  // 最低分设为 10 以确保所有组合都有机会被选中
+  const weights = combos.map((c) => Math.max(c.score, 10));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  let random = Math.random() * totalWeight;
+
+  for (let i = 0; i < combos.length; i++) {
+    random -= weights[i];
+    if (random <= 0) return combos[i];
+  }
+
+  return combos[combos.length - 1];
+}
+
+// ============================================================
+// 2b. generateVariationCombo (feedback-triggered)
+// ============================================================
+
+/**
+ * 基于一个被点赞的组合生成 1 个变体组合。
+ * 保留核心方向，但从新角度切入。
+ */
+export async function generateVariationCombo(
+  topicId: string,
+  likedCombo: KeywordCombo
+): Promise<KeywordCombo | null> {
+  console.log(
+    `[KeywordEngine] 基于点赞组合 "${likedCombo.keywords.join('+')}" 生成变体...`
+  );
+
+  try {
+    const client = await getOpenAIClient();
+    const model = await getOpenAIModel();
+
+    const existingCombos = await prisma.keywordCombo.findMany({
+      where: { topicId, status: { not: 'retired' } },
+      select: { keywords: true },
+    });
+
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: `你是信息检索专家。用户喜欢这个搜索关键词组合：${likedCombo.keywords.join(' + ')}
+
+请生成 1 个变体组合，保留核心方向但从新角度切入。
+
+已有组合（不要重复）：
+${existingCombos.map((c) => `- ${c.keywords.join(' + ')}`).join('\n')}
+
+要求：2-4 个关键词，与原组合方向相关但覆盖不同子话题。
+
+返回 JSON：{ "keywords": ["关键词1", "关键词2"] }`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.8,
+      max_completion_tokens: 200,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed.keywords) || parsed.keywords.length < 2) return null;
+
+    const record = await prisma.keywordCombo.create({
+      data: {
+        topicId,
+        keywords: parsed.keywords,
+        status: 'new',
+        score: 55, // Slightly above default — inspired by a liked combo
+      },
+    });
+
+    console.log(
+      `[KeywordEngine] 生成变体组合: ${record.keywords.join('+')}`
+    );
+    return record;
+  } catch (error) {
+    console.log(
+      '[KeywordEngine] 生成变体组合失败:',
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
 }
 
 // ============================================================

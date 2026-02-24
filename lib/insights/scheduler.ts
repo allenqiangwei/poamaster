@@ -1,6 +1,8 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { runKeywordGeneration } from './keyword-engine';
+import { runCooMemoryPipeline } from '@/lib/coo-memory/scheduler';
 
+let cooMemoryJob: ScheduledTask | null = null;
 let keywordGenJob: ScheduledTask | null = null;
 let briefingGenJob: ScheduledTask | null = null;
 
@@ -17,6 +19,17 @@ export function startScheduler(): void {
     console.log('[Scheduler] Already running, skipping initialization');
     return;
   }
+
+  // 21:50 — COO memory generation
+  cooMemoryJob = cron.schedule('50 21 * * *', async () => {
+    console.log('[Scheduler] 21:50 — Starting COO memory pipeline');
+    try {
+      await runCooMemoryPipeline();
+      console.log('[Scheduler] COO memory pipeline complete');
+    } catch (error) {
+      console.error('[Scheduler] COO memory pipeline failed:', error);
+    }
+  });
 
   // 22:00 — keyword generation
   keywordGenJob = cron.schedule('0 22 * * *', async () => {
@@ -47,13 +60,17 @@ export function startScheduler(): void {
     }
   });
 
-  console.log('[Scheduler] Insight pipeline scheduler started (22:00 keywords, 22:05 briefing)');
+  console.log('[Scheduler] Insight pipeline scheduler started (21:50 COO memory, 22:00 keywords, 22:05 briefing)');
 }
 
 /**
  * Stop the scheduler. Used for cleanup.
  */
 export function stopScheduler(): void {
+  if (cooMemoryJob) {
+    cooMemoryJob.stop();
+    cooMemoryJob = null;
+  }
   if (keywordGenJob) {
     keywordGenJob.stop();
     keywordGenJob = null;

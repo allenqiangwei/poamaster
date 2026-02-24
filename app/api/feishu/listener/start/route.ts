@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Spawn listener process
-    const child = spawn('npx', ['tsx', 'src/index.ts'], {
-      cwd: LISTENER_DIR,
+    // Spawn listener process (from project root — listener resolves its own paths via import.meta.url)
+    const child = spawn('npx', ['tsx', 'services/feishu-listener/src/index.ts'], {
+      cwd: process.cwd(),
       detached: true,
       stdio: 'ignore',
       env: {

@@ -34,6 +34,7 @@ import {
   Close as CloseIcon,
   TravelExplore as CompetitorIcon,
   Flag as FlagIcon,
+  Psychology as PsychologyIcon,
 } from '@mui/icons-material';
 import { designTokens as dt } from '@/lib/theme';
 
@@ -47,6 +48,7 @@ const NAV_ITEMS = [
   { path: '/roundtable', label: '圆桌', icon: <RoundtableIcon fontSize="small" /> },
   { path: '/feishu', label: '飞书', icon: <FeishuIcon fontSize="small" /> },
   { path: '/insights', label: '简报', icon: <InsightsIcon fontSize="small" /> },
+  { path: '/coo-briefing', label: 'COO', icon: <PsychologyIcon fontSize="small" /> },
   { path: '/sentiment', label: '舆情', icon: <MonitorHeartIcon fontSize="small" /> },
   { path: '/insights/competitors', label: '竞品', icon: <CompetitorIcon fontSize="small" /> },
 ];

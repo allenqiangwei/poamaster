@@ -95,15 +95,27 @@ export default function ReviewPage() {
       const data = await res.json();
 
       if (data.success) {
+        const topScore = data.data.length > 0 ? data.data[0].score : 0;
+        // >0.7: auto-ignore (near-duplicate, no new info)
+        // 0.5-0.7: auto-update (same topic, likely has new evidence)
+        // <0.5: create (new finding)
+        let autoAction: Action = 'create';
+        let autoTargetId: string | null = null;
+        if (topScore > 0.7) {
+          autoAction = 'ignore';
+        } else if (topScore > 0.5) {
+          autoAction = 'update';
+          autoTargetId = data.data[0].entryId;
+        }
+
         setCandidateStates(prev => ({
           ...prev,
           [index]: {
             ...prev[index],
             similarEntries: data.data,
             loadingSimilar: false,
-            // Auto-select update if high similarity match found
-            action: data.data.length > 0 && data.data[0].score > 0.5 ? 'update' : 'create',
-            updateTargetId: data.data.length > 0 && data.data[0].score > 0.5 ? data.data[0].entryId : null,
+            action: autoAction,
+            updateTargetId: autoTargetId,
           },
         }));
       }
@@ -330,19 +342,27 @@ export default function ReviewPage() {
                             />
 
                             {/* Evidence */}
-                            <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                            <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'transparent' }}>
                               <Typography variant="body2" color="text.secondary">
                                 {candidate.evidence_quote}
                               </Typography>
                             </Paper>
 
-                            {/* Confidence */}
-                            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                            {/* Confidence + duplicate indicator */}
+                            <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                               <Chip
                                 label={`置信度: ${Math.round(candidate.confidence * 100)}%`}
                                 size="small"
                                 color={candidate.confidence > 0.8 ? 'success' : candidate.confidence > 0.5 ? 'warning' : 'default'}
                               />
+                              {state.similarEntries.length > 0 && state.similarEntries[0].score > 0.7 && (
+                                <Chip
+                                  label={`重复 ${Math.round(state.similarEntries[0].score * 100)}%`}
+                                  size="small"
+                                  color="warning"
+                                  variant="outlined"
+                                />
+                              )}
                             </Box>
 
                             {/* Action selection */}
