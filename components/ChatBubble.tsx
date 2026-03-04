@@ -14,6 +14,7 @@ import {
   Zoom,
   Divider,
   Button,
+  Chip,
 } from '@mui/material';
 import {
   SmartToy as SmartToyIcon,
@@ -23,6 +24,9 @@ import {
   Send as SendIcon,
   Delete as DeleteIcon,
   Refresh as RetryIcon,
+  AttachFile as AttachIcon,
+  InsertDriveFile as FileIcon,
+  CloudUpload as UploadIcon,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { designTokens as dt } from '@/lib/theme';
@@ -55,6 +59,10 @@ export default function ChatBubble() {
   const [sending, setSending] = useState(false);
   const [threadsLoading, setThreadsLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; path: string; size: number }>>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastPollTime = useRef<string>(new Date().toISOString());
 
@@ -209,14 +217,22 @@ export default function ChatBubble() {
     const text = input.trim();
     if (!text || sending) return;
 
+    // Capture attached files before clearing state
+    const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
     setInput('');
+    setAttachedFiles([]);
     setSending(true);
 
     const userTempId = `temp-${Date.now()}`;
     const assistantTempId = `temp-assistant-${Date.now()}`;
 
+    // Show file names in the user bubble for context
+    const displayText = filesToSend
+      ? `${text}\n\n📎 ${filesToSend.map((f) => f.name).join(', ')}`
+      : text;
+
     // Optimistically add user message + assistant placeholder
-    const userMsg: Message = { id: userTempId, role: 'user', content: text, status: 'done' };
+    const userMsg: Message = { id: userTempId, role: 'user', content: displayText, status: 'done' };
     const assistantMsg: Message = {
       id: assistantTempId,
       role: 'assistant',
@@ -233,6 +249,7 @@ export default function ChatBubble() {
         body: JSON.stringify({
           threadId: activeThread?.chatId || undefined,
           message: text,
+          files: filesToSend,
         }),
       });
       const json = await res.json();
@@ -273,7 +290,7 @@ export default function ChatBubble() {
     } finally {
       setSending(false);
     }
-  }, [input, sending, activeThread]);
+  }, [input, sending, activeThread, attachedFiles]);
 
   // ─── Retry failed message ───────────────────────────────────
 
@@ -308,6 +325,53 @@ export default function ChatBubble() {
       return next;
     });
   }
+
+  // ─── File upload ────────────────────────────────────────────
+
+  const uploadFiles = useCallback(async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      for (const f of files) formData.append('files', f);
+      const res = await fetch('/api/chat/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAttachedFiles((prev) => [...prev, ...data.files]);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
+    }
+  }, [uploadFiles]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   // ─── Helpers ─────────────────────────────────────────────────
 
@@ -446,6 +510,9 @@ export default function ChatBubble() {
       {/* Chat Window */}
       <Fade in={open}>
         <Paper
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
           sx={{
             position: 'fixed',
             bottom: { xs: 0, sm: 24 },
@@ -460,6 +527,30 @@ export default function ChatBubble() {
             boxShadow: `0 8px 32px ${alpha('#0f172a', 0.12)}`,
           }}
         >
+          {/* Drag overlay */}
+          {dragOver && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1,
+                bgcolor: alpha(dt.accent.main, 0.12),
+                border: `2px dashed ${dt.accent.main}`,
+                borderRadius: { xs: 0, sm: 3 },
+                pointerEvents: 'none',
+              }}
+            >
+              <UploadIcon sx={{ fontSize: 40, color: dt.accent.main }} />
+              <Typography variant="body2" sx={{ color: dt.accent.main, fontWeight: 600 }}>
+                松开上传文件
+              </Typography>
+            </Box>
+          )}
           {/* Header */}
           <Box
             sx={{
@@ -632,8 +723,42 @@ export default function ChatBubble() {
                 <div ref={messagesEndRef} />
               </Box>
 
+              {/* Attached files preview */}
+              {attachedFiles.length > 0 && (
+                <Box sx={{ px: 1.5, pt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, borderTop: `1px solid ${dt.border.default}` }}>
+                  {attachedFiles.map((f, i) => (
+                    <Chip
+                      key={i}
+                      icon={<FileIcon sx={{ fontSize: 14 }} />}
+                      label={f.name}
+                      size="small"
+                      onDelete={() => removeFile(i)}
+                      sx={{ maxWidth: 180, fontSize: '0.7rem' }}
+                    />
+                  ))}
+                </Box>
+              )}
+
               {/* Input */}
-              <Box sx={{ p: 1.5, borderTop: `1px solid ${dt.border.default}`, display: 'flex', gap: 1 }}>
+              <Box sx={{ p: 1.5, borderTop: attachedFiles.length > 0 ? 'none' : `1px solid ${dt.border.default}`, display: 'flex', gap: 0.5, alignItems: 'flex-end' }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    if (e.target.files) uploadFiles(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  sx={{ color: dt.text.secondary, '&:hover': { color: dt.accent.main } }}
+                >
+                  {uploading ? <CircularProgress size={18} /> : <AttachIcon fontSize="small" />}
+                </IconButton>
                 <TextField
                   fullWidth
                   size="small"
@@ -653,7 +778,7 @@ export default function ChatBubble() {
                 <IconButton
                   data-chat-send
                   onClick={sendMessage}
-                  disabled={!input.trim() || sending}
+                  disabled={(!input.trim() && attachedFiles.length === 0) || sending}
                   sx={{
                     color: dt.accent.main,
                     '&:hover': { backgroundColor: dt.accent.subtle },

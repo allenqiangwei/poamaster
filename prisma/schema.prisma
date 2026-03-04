@@ -359,6 +359,7 @@ model FeishuChat {
   isWhitelisted   Boolean  @default(false)
   whitelistedAt   DateTime?
   isRenamed     Boolean         @default(false)
+  lastAnalyzedAt DateTime?
   digests       ChatDigest[]
   signals       ChatSignal[]
   messages      FeishuMessage[]
@@ -441,17 +442,18 @@ model TeamPulse {
 }
 
 model InsightTopic {
-  id        String         @id @default(cuid())
-  name      String
-  keywords  String[]       @default([])
-  source    String         @default("auto")
-  weight    Int            @default(50)
-  isPaused  Boolean        @default(false)
-  lastHitAt DateTime?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  cards     InsightCard[]
-  combos    KeywordCombo[]
+  id         String         @id @default(cuid())
+  name       String
+  keywords   String[]       @default([])
+  source     String         @default("auto")
+  weight     Int            @default(50)
+  isPaused   Boolean        @default(false)
+  mutedUntil DateTime?
+  lastHitAt  DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  cards      InsightCard[]
+  combos     KeywordCombo[]
 }
 
 model KeywordCombo {

@@ -12,13 +12,21 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { threadId, message } = body;
+    const { threadId, message, files } = body;
 
     if (!message?.trim()) {
       return NextResponse.json({ success: false, error: 'Message is required' }, { status: 400 });
     }
 
-    const trimmedMessage = message.trim();
+    // Build prompt: append file references so Claude CLI can read them
+    let trimmedMessage = message.trim();
+    const attachedFiles: Array<{ name: string; path: string }> = files || [];
+    if (attachedFiles.length > 0) {
+      const fileList = attachedFiles
+        .map((f: { name: string; path: string }) => `- ${f.name}: ${f.path}`)
+        .join('\n');
+      trimmedMessage += `\n\n[附件 — 请用 Read 工具读取以下文件进行分析]\n${fileList}`;
+    }
 
     // Load or create conversation
     let chatId = threadId;

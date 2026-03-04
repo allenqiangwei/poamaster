@@ -2,10 +2,19 @@ import { spawn } from 'child_process';
 
 const CLAUDE_PATH = '/opt/homebrew/bin/claude';
 const DEFAULT_MODEL = 'sonnet';
-const MAX_TURNS = '15';
-const TIMEOUT_MS = 180000;
+const MAX_TURNS = '30';
+const TIMEOUT_MS = 600000;
 const MAX_BUFFER = 10 * 1024 * 1024;
 const SYSTEM_PROMPT = '你是 POA Master 的 AI 助手。直接回答用户的问题，不要使用 AskUserQuestion 工具，不要反问用户。如果信息不足，做出合理假设后直接给出答案。用中文回答。';
+
+// Strip Claude Code session env vars to prevent "cannot launch inside another session" error
+function getCleanEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+  delete env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS;
+  return env;
+}
 
 interface ClaudeResponse {
   result: string;
@@ -19,6 +28,7 @@ function runClaude(args: string[]): Promise<{ code: number | null; stdout: strin
     const child = spawn(CLAUDE_PATH, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
+      env: getCleanEnv(),
     });
 
     let stdout = '';

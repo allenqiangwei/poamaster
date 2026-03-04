@@ -37,51 +37,52 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const isApiRoute = pathname.startsWith('/api/');
+
   // 从 Cookie 中获取 Session token
   const token = request.cookies.get('session')?.value;
 
-  // Debug logging
-  const allCookies = request.cookies.getAll();
-  console.log(`[Middleware] ${pathname} - Cookies received: ${allCookies.map(c => c.name).join(', ') || 'none'}`);
-
   if (!token) {
-    // 未登录，重定向到登录页
-    console.log(`[Middleware] No session token for ${pathname}, redirecting to login`);
+    console.log(`[Middleware] No session token for ${pathname}`);
+    if (isApiRoute) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }
-
-  console.log(`[Middleware] Session token found for ${pathname}`);
 
   try {
     // 验证 Session
     const session = await verifySession(token);
 
     if (!session) {
-      // Session 无效或已过期，重定向到登录页
+      console.log(`[Middleware] Session invalid/expired for ${pathname}`);
+      if (isApiRoute) {
+        // API routes: return 401 but do NOT delete cookie (could be transient)
+        return NextResponse.json({ error: 'Session expired' }, { status: 401 });
+      }
+      // Page routes: redirect to login and clear cookie
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('from', pathname);
       const response = NextResponse.redirect(loginUrl);
-
-      // 清除无效的 Session Cookie
       response.cookies.delete('session');
-
       return response;
     }
 
     // Session 有效，允许访问
     return NextResponse.next();
   } catch (error) {
-    // 验证出错，重定向到登录页
-    console.error('Session verification error:', error);
+    console.error(`[Middleware] Session verification error for ${pathname}:`, error);
+    if (isApiRoute) {
+      // API routes: return 500, do NOT delete cookie (transient DB error)
+      return NextResponse.json({ error: 'Auth service error' }, { status: 500 });
+    }
+    // Page routes: redirect to login
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     const response = NextResponse.redirect(loginUrl);
-
-    // 清除可能损坏的 Session Cookie
     response.cookies.delete('session');
-
     return response;
   }
 }

@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
       success: true,
       data: {
         updates: updates.map((m) => ({
-          messageId: m.id,
+          id: m.id,
           role: m.role,
           content: m.content,
           status: m.status,

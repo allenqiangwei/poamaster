@@ -24,21 +24,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
 
-    // 1. Fetch all active topics with sufficient weight
+    // 0. Parse date from request body (frontend sends local date), fallback to server local date
+    let targetDate: Date;
+    try {
+      const body = await request.json().catch(() => ({}));
+      if (body.date && typeof body.date === 'string') {
+        targetDate = new Date(body.date + 'T00:00:00.000Z');
+      } else {
+        // Use UTC+8 (China timezone) as default
+        const now = new Date(Date.now() + 8 * 3600 * 1000);
+        targetDate = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+      }
+    } catch {
+      const now = new Date(Date.now() + 8 * 3600 * 1000);
+      targetDate = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+    }
+
+    // 1. Recover stuck briefings (generating > 10 min with 0 cards)
+    await prisma.insightBriefing.updateMany({
+      where: {
+        status: 'generating',
+        cardCount: 0,
+        createdAt: { lt: new Date(Date.now() - 10 * 60 * 1000) },
+      },
+      data: { status: 'error' },
+    });
+
+    // 2. Fetch all active topics with sufficient weight (skip muted topics in cooldown)
     const topics = await prisma.insightTopic.findMany({
-      where: { isPaused: false, weight: { gte: 20 } },
+      where: {
+        isPaused: false,
+        weight: { gte: 20 },
+        OR: [
+          { mutedUntil: null },
+          { mutedUntil: { lt: new Date() } },
+        ],
+      },
       orderBy: { weight: 'desc' },
     });
 
     if (topics.length === 0) {
+      // Check if all topics are muted
+      const mutedCount = await prisma.insightTopic.count({
+        where: { isPaused: false, weight: { gte: 20 }, mutedUntil: { gte: new Date() } },
+      });
       return NextResponse.json({
         success: false,
-        error: '没有可研究的话题，请先添加话题',
+        error: mutedCount > 0
+          ? `所有话题都在冷静期中（${mutedCount} 个），请等待冷静期结束或添加新话题`
+          : '没有可研究的话题，请先添加话题',
       });
     }
 
-    // 2. Create or update today's briefing record
-    const todayDate = new Date(new Date().toISOString().split('T')[0]);
+    // 3. Create or update briefing record for the target date
+    const todayDate = targetDate;
 
     const briefing = await prisma.insightBriefing.upsert({
       where: { date: todayDate },

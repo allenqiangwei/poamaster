@@ -65,3 +65,12 @@ uploads/
 *.pid
 .pid
 .status
+
+# Compiled service output
+services/*/dist/
+
+# Report PDFs (generated artifacts)
+*.pdf
+
+# Screenshots (local only)
+*.png

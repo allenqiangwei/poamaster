@@ -6,10 +6,8 @@
  * 4. Store results in ChatDigest, ChatSignal, TeamPulse
  */
 
-import { PrismaClient } from '@prisma/client';
 import { getOpenAIClient } from '@/lib/openai';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 interface AnalysisResult {
   summary: string;
@@ -32,25 +30,31 @@ export async function runDailyAnalysis(): Promise<{
   chatsAnalyzed: number;
   signalsCreated: number;
 }> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const fallbackSince = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 1. Get all active (non-blacklisted) group chats
+  // 1. Get all active (non-blacklisted) chats — both group and private
   const chats = await prisma.feishuChat.findMany({
-    where: { isBlacklisted: false, chatType: 'group' },
-    select: { chatId: true, name: true },
+    where: { isBlacklisted: false, chatId: { not: '' } },
+    select: { chatId: true, name: true, chatType: true, lastAnalyzedAt: true },
   });
 
   let chatsAnalyzed = 0;
   let signalsCreated = 0;
 
+  // 2. Pre-filter: only analyze chats with enough new messages
+  const chatsWithMessages: Array<{
+    chat: typeof chats[0];
+    messages: Array<{ messageId: string; senderName: string; content: string; timestamp: Date }>;
+  }> = [];
+
   for (const chat of chats) {
-    // 2. Get messages from last 24h
+    const since = chat.lastAnalyzedAt || fallbackSince;
     const messages = await prisma.feishuMessage.findMany({
       where: {
         chatId: chat.chatId,
-        timestamp: { gte: since },
+        timestamp: { gt: since },
         msgType: { in: ['text', 'post'] },
         content: { not: '' },
       },
@@ -58,68 +62,117 @@ export async function runDailyAnalysis(): Promise<{
       select: { messageId: true, senderName: true, content: true, timestamp: true },
     });
 
-    // Skip chats with too few messages
-    if (messages.length < 3) continue;
-
-    try {
-      // 3. LLM analysis
-      const analysis = await analyzeChat(chat.name || chat.chatId, messages);
-
-      // 4. Store ChatDigest (upsert for idempotency)
-      await prisma.chatDigest.upsert({
-        where: { chatId_date: { chatId: chat.chatId, date: today } },
-        create: {
-          chatId: chat.chatId,
-          date: today,
-          summary: analysis.summary,
-          keyTopics: analysis.keyTopics,
-          messageCount: messages.length,
-          activeUsers: [...new Set(messages.map(m => m.senderName))],
-          signalCount: countSignalsByType(analysis.signals),
-        },
-        update: {
-          summary: analysis.summary,
-          keyTopics: analysis.keyTopics,
-          messageCount: messages.length,
-          activeUsers: [...new Set(messages.map(m => m.senderName))],
-          signalCount: countSignalsByType(analysis.signals),
-        },
-      });
-
-      // 5. Store ChatSignals from LLM analysis
-      for (const signal of analysis.signals) {
-        await prisma.chatSignal.create({
-          data: {
-            chatId: chat.chatId,
-            signalType: signal.type,
-            severity: signal.severity,
-            title: signal.title,
-            summary: signal.summary,
-            messageIds: [],
-            relatedUser: signal.relatedUser || null,
-            source: 'batch',
-          },
-        });
-        signalsCreated++;
-      }
-
-      // 6. Compute and store TeamPulse metrics
-      await computeTeamPulse(chat.chatId, today, messages, analysis.sentimentScore);
-
-      chatsAnalyzed++;
-    } catch (err: any) {
-      console.error(`[TeamPulse] Failed to analyze chat ${chat.name}: ${err.message}`);
+    if (messages.length >= 3) {
+      chatsWithMessages.push({ chat, messages });
     }
   }
 
-  await prisma.$disconnect();
+  if (chatsWithMessages.length === 0) {
+    return { chatsAnalyzed: 0, signalsCreated: 0 };
+  }
+
+  console.log(`[TeamPulse] Analyzing ${chatsWithMessages.length} chats in parallel...`);
+
+  // 3. Run LLM analysis in parallel (batch of 5 to avoid rate limits)
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < chatsWithMessages.length; i += BATCH_SIZE) {
+    const batch = chatsWithMessages.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async ({ chat, messages }) => {
+        const analysis = await analyzeChat(chat.name || chat.chatId, messages, chat.chatType);
+        return { chat, messages, analysis };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status !== 'fulfilled') {
+        console.error(`[TeamPulse] Batch analysis failed:`, result.reason);
+        continue;
+      }
+      const { chat, messages, analysis } = result.value;
+
+      try {
+        // 4. Store ChatDigest
+        await prisma.chatDigest.upsert({
+          where: { chatId_date: { chatId: chat.chatId, date: today } },
+          create: {
+            chatId: chat.chatId,
+            date: today,
+            summary: analysis.summary,
+            keyTopics: analysis.keyTopics,
+            messageCount: messages.length,
+            activeUsers: [...new Set(messages.map(m => m.senderName))],
+            signalCount: countSignalsByType(analysis.signals),
+          },
+          update: {
+            summary: analysis.summary,
+            keyTopics: analysis.keyTopics,
+            messageCount: messages.length,
+            activeUsers: [...new Set(messages.map(m => m.senderName))],
+            signalCount: countSignalsByType(analysis.signals),
+          },
+        });
+
+        // 5. Store ChatSignals with deduplication
+        for (const signal of analysis.signals) {
+          const existing = await prisma.chatSignal.findFirst({
+            where: {
+              chatId: chat.chatId,
+              title: signal.title,
+              isResolved: false,
+            },
+          });
+          if (existing) {
+            await prisma.chatSignal.update({
+              where: { id: existing.id },
+              data: {
+                summary: signal.summary,
+                severity: signal.severity,
+                detectedAt: new Date(),
+              },
+            });
+          } else {
+            await prisma.chatSignal.create({
+              data: {
+                chatId: chat.chatId,
+                signalType: signal.type,
+                severity: signal.severity,
+                title: signal.title,
+                summary: signal.summary,
+                messageIds: [],
+                relatedUser: signal.relatedUser || null,
+                source: 'batch',
+              },
+            });
+            signalsCreated++;
+          }
+        }
+
+        // 6. Compute TeamPulse metrics
+        await computeTeamPulse(chat.chatId, today, messages, analysis.sentimentScore);
+
+        // 7. Update lastAnalyzedAt
+        await prisma.feishuChat.update({
+          where: { chatId: chat.chatId },
+          data: { lastAnalyzedAt: new Date() },
+        });
+
+        chatsAnalyzed++;
+      } catch (err: any) {
+        console.error(`[TeamPulse] Failed to store results for ${chat.name}: ${err.message}`);
+      }
+    }
+  }
+
+  console.log(`[TeamPulse] Done: ${chatsAnalyzed}/${chatsWithMessages.length} chats, ${signalsCreated} signals`);
   return { chatsAnalyzed, signalsCreated };
 }
 
 /** Send messages to LLM for deep analysis */
 async function analyzeChat(
   chatName: string,
-  messages: Array<{ senderName: string; content: string; timestamp: Date }>
+  messages: Array<{ senderName: string; content: string; timestamp: Date }>,
+  chatType: string = 'group',
 ): Promise<AnalysisResult> {
   const openai = await getOpenAIClient();
 
@@ -136,11 +189,19 @@ async function analyzeChat(
     transcript = transcript.substring(0, 4000) + '\n... (truncated)';
   }
 
-  const systemPrompt = `你是一个运营分析助手。分析工作群聊对话，提取运营信号。
+  const isPrivate = chatType === 'private';
+  const chatLabel = isPrivate ? '私聊' : '群聊';
+  const contextNote = isPrivate
+    ? `这是与"${chatName}"的一对一私聊。重点关注：对方提出的需求、承诺的事项、反馈的问题、情绪变化。`
+    : `这是名为"${chatName}"的工作群聊。`;
+
+  const systemPrompt = `你是一个运营分析助手。分析工作${chatLabel}对话，提取运营信号。
+
+${contextNote}
 
 请以JSON格式返回分析结果：
 {
-  "summary": "3-5句话总结今天的主要讨论内容",
+  "summary": "3-5句话总结主要讨论内容",
   "keyTopics": ["话题1", "话题2"],
   "signals": [
     {
@@ -155,9 +216,9 @@ async function analyzeChat(
 }
 
 信号类型说明：
-- DECISION: 群里做出的决策或确认的方案
-- ACTION: 需要跟进的待办事项
-- SENTIMENT: 从对话语气感受到的团队情绪（正面/负面/压力）
+- DECISION: 做出的决策或确认的方案
+- ACTION: 需要跟进的待办事项${isPrivate ? '、对方提出的请求或承诺' : ''}
+- SENTIMENT: 从对话语气感受到的情绪（正面/负面/压力）
 
 sentimentScore: -1.0（非常负面）到 1.0（非常正面），0为中性
 
@@ -166,7 +227,7 @@ sentimentScore: -1.0（非常负面）到 1.0（非常正面），0为中性
 - 如果没有某类信号，signals数组中就不包含该类型
 - 关注实际的运营价值，忽略闲聊`;
 
-  const userPrompt = `群聊名称: ${chatName}\n对话记录（过去24小时）:\n\n${transcript}`;
+  const userPrompt = `${chatLabel}${isPrivate ? '对象' : '名称'}: ${chatName}\n对话记录:\n\n${transcript}`;
 
   try {
     const resp = await openai.chat.completions.create({
@@ -272,25 +333,23 @@ function countSignalsByType(signals: AnalysisResult['signals']): Record<string, 
  * Called by the scheduler after analysis completes.
  */
 export async function generatePulseSummary(): Promise<string> {
-  const db = new PrismaClient();
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-    const [digests, signals, pulses] = await Promise.all([
-      db.chatDigest.findMany({
-        where: { date: today },
-        include: { chat: { select: { name: true } } },
-        orderBy: { messageCount: 'desc' },
-      }),
-      db.chatSignal.findMany({
-        where: { detectedAt: { gte: today }, isResolved: false },
-        include: { chat: { select: { name: true } } },
-      }),
-      db.teamPulse.findMany({
-        where: { date: today },
-      }),
-    ]);
+  const [digests, signals, pulses] = await Promise.all([
+    prisma.chatDigest.findMany({
+      where: { date: today },
+      include: { chat: { select: { name: true } } },
+      orderBy: { messageCount: 'desc' },
+    }),
+    prisma.chatSignal.findMany({
+      where: { detectedAt: { gte: today }, isResolved: false },
+      include: { chat: { select: { name: true } } },
+    }),
+    prisma.teamPulse.findMany({
+      where: { date: today },
+    }),
+  ]);
 
     const totalMessages = pulses.reduce((s, p) => s + p.messageCount, 0);
     const activeChats = pulses.length;
@@ -328,7 +387,4 @@ export async function generatePulseSummary(): Promise<string> {
     lines.push('查看详情: /feishu/pulse');
 
     return lines.join('\n');
-  } finally {
-    await db.$disconnect();
-  }
 }

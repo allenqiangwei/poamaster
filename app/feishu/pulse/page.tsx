@@ -96,7 +96,7 @@ export default function TeamPulsePage() {
 
   // Task creation dialog
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-  const [taskForm, setTaskForm] = useState({ title: '', dod: '', assigneeId: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', dod: '', assigneeId: '', dueDate: '' });
   const [taskCreating, setTaskCreating] = useState(false);
   const [assignees, setAssignees] = useState<Array<{ id: string; name: string }>>([]);
   const [snackMsg, setSnackMsg] = useState('');
@@ -148,16 +148,24 @@ export default function TeamPulsePage() {
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
+    setError(null);
     try {
       const res = await fetch('/api/team-pulse/analyze', {
         method: 'POST', credentials: 'include',
       });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        setError(`分析失败 (${res.status}): ${text || res.statusText}`);
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         loadData();
+      } else {
+        setError(data.error || '分析失败');
       }
-    } catch {
-      setError('分析失败');
+    } catch (err: any) {
+      setError(`分析请求失败: ${err.message || '网络错误，请稍后重试'}`);
     } finally {
       setAnalyzing(false);
     }
@@ -168,6 +176,7 @@ export default function TeamPulsePage() {
       title: signal.title,
       dod: `[${signal.signalType}] ${signal.summary}\n来源: ${signal.chat.name || '未命名群聊'}`,
       assigneeId: '',
+      dueDate: '',
     });
     setTaskDialogOpen(true);
     if (assignees.length === 0) {
@@ -191,6 +200,7 @@ export default function TeamPulsePage() {
           title: taskForm.title.trim(),
           dod: taskForm.dod.trim() || undefined,
           assigneeId: taskForm.assigneeId || undefined,
+          dueDate: taskForm.dueDate || undefined,
         }),
       });
       const data = await res.json();
@@ -556,6 +566,14 @@ export default function TeamPulsePage() {
             rows={3}
             value={taskForm.dod}
             onChange={e => setTaskForm(f => ({ ...f, dod: e.target.value }))}
+          />
+          <TextField
+            label="截止日期"
+            type="date"
+            fullWidth
+            value={taskForm.dueDate}
+            onChange={e => setTaskForm(f => ({ ...f, dueDate: e.target.value }))}
+            slotProps={{ inputLabel: { shrink: true } }}
           />
           <FormControl fullWidth>
             <InputLabel>负责人</InputLabel>

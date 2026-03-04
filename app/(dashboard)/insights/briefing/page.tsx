@@ -43,6 +43,7 @@ import {
   Close as CloseIcon,
   Send as SendIcon,
   Star as StarIcon,
+  DoNotDisturb as MuteIcon,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import { designTokens as dt } from '@/lib/theme';
@@ -295,13 +296,16 @@ function BriefingCardItem({
   card,
   onFeedback,
   onShare,
+  onMute,
 }: {
   card: BriefingCard;
   onFeedback: (id: string, feedback: number) => void;
   onShare: (id: string) => Promise<void>;
+  onMute: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [muting, setMuting] = useState(false);
   const viewedRef = useRef(false);
 
   const cat = CATEGORY_CONFIG[card.category] || {
@@ -328,6 +332,15 @@ function BriefingCardItem({
       await onShare(card.id);
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handleMute = async () => {
+    setMuting(true);
+    try {
+      await onMute(card.id);
+    } finally {
+      setMuting(false);
     }
   };
 
@@ -486,6 +499,25 @@ function BriefingCardItem({
                 </IconButton>
               </span>
             </Tooltip>
+            <Tooltip title="太多了 — 该话题冷静一周" arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleMute}
+                  disabled={muting}
+                  sx={{
+                    color: dt.text.muted,
+                    '&:hover': { color: dt.warning.main, bgcolor: dt.warning.subtle },
+                  }}
+                >
+                  {muting ? (
+                    <CircularProgress size={18} thickness={5} sx={{ color: dt.warning.main }} />
+                  ) : (
+                    <MuteIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
           </Box>
 
           {/* Expand arrow */}
@@ -551,6 +583,25 @@ function BriefingCardItem({
                   <CircularProgress size={16} thickness={5} sx={{ color: dt.accent.main }} />
                 ) : (
                   <SendIcon sx={{ fontSize: 18 }} />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="太多了 — 该话题冷静一周" arrow>
+            <span>
+              <IconButton
+                size="small"
+                onClick={handleMute}
+                disabled={muting}
+                sx={{
+                  color: dt.text.muted,
+                  '&:hover': { color: dt.warning.main, bgcolor: dt.warning.subtle },
+                }}
+              >
+                {muting ? (
+                  <CircularProgress size={16} thickness={5} sx={{ color: dt.warning.main }} />
+                ) : (
+                  <MuteIcon sx={{ fontSize: 18 }} />
                 )}
               </IconButton>
             </span>
@@ -732,7 +783,15 @@ export default function BriefingPage() {
       const res = await fetch('/api/insights/briefing/generate', {
         method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: formatDateParam(selectedDate) }),
       });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        setError(`生成失败 (${res.status}): ${text || res.statusText}`);
+        setGenerating(false);
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         // Reload to get the updated briefing
@@ -741,8 +800,8 @@ export default function BriefingPage() {
         setError(data.error || '生成失败');
         setGenerating(false);
       }
-    } catch {
-      setError('网络错误');
+    } catch (err: any) {
+      setError(`网络错误: ${err.message || '请检查网络连接后重试'}`);
       setGenerating(false);
     }
   };
@@ -802,6 +861,33 @@ export default function BriefingPage() {
       }
     } catch {
       setSnackbar('网络错误，分享失败');
+    }
+  };
+
+  // ─── Mute handler (太多了) ────────────────────────────
+  const handleMute = async (cardId: string) => {
+    try {
+      const res = await fetch(`/api/insights/cards/${cardId}/mute`, {
+        method: 'PUT',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success && briefing) {
+        // Remove all cards from the same topic
+        const mutedCard = briefing.cards.find((c) => c.id === cardId);
+        if (mutedCard) {
+          setBriefing({
+            ...briefing,
+            cards: briefing.cards.filter((c) => c.id === cardId || c.category !== mutedCard.category),
+          });
+        }
+        const until = new Date(data.mutedUntil).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+        setSnackbar(`话题「${data.topicName}」已静默，${until} 前不再出现`);
+      } else {
+        setSnackbar(data.error || '静默失败');
+      }
+    } catch {
+      setSnackbar('网络错误');
     }
   };
 
@@ -1084,7 +1170,7 @@ export default function BriefingPage() {
             {briefing.cards.map((card, i) => (
               <Fade in timeout={400 + i * 100} key={card.id}>
                 <Box>
-                  <BriefingCardItem card={card} onFeedback={handleFeedback} onShare={handleShare} />
+                  <BriefingCardItem card={card} onFeedback={handleFeedback} onShare={handleShare} onMute={handleMute} />
                 </Box>
               </Fade>
             ))}
