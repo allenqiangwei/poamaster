@@ -793,13 +793,39 @@ export default function BriefingPage() {
         return;
       }
       const data = await res.json();
-      if (data.success) {
-        // Reload to get the updated briefing
-        await loadBriefing(selectedDate);
-      } else {
+      if (!data.success) {
         setError(data.error || '生成失败');
         setGenerating(false);
+        return;
       }
+      // Backend returns immediately — poll until briefing is ready
+      const pollInterval = setInterval(async () => {
+        try {
+          const pollRes = await fetch(
+            `/api/insights/briefing?date=${formatDateParam(selectedDate)}`,
+            { credentials: 'include' }
+          );
+          if (!pollRes.ok) return;
+          const pollData = await pollRes.json();
+          const b = pollData.briefing;
+          if (b && b.status === 'ready') {
+            clearInterval(pollInterval);
+            setBriefing(b);
+            setGenerating(false);
+          } else if (b && b.status === 'error') {
+            clearInterval(pollInterval);
+            setError(b.summary || '生成失败');
+            setGenerating(false);
+          }
+        } catch {
+          // keep polling
+        }
+      }, 3000);
+      // Safety: stop polling after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setGenerating(false);
+      }, 5 * 60 * 1000);
     } catch (err: any) {
       setError(`网络错误: ${err.message || '请检查网络连接后重试'}`);
       setGenerating(false);

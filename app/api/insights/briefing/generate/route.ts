@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
       if (body.date && typeof body.date === 'string') {
         targetDate = new Date(body.date + 'T00:00:00.000Z');
       } else {
-        // Use UTC+8 (China timezone) as default
         const now = new Date(Date.now() + 8 * 3600 * 1000);
         targetDate = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
       }
@@ -64,7 +63,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (topics.length === 0) {
-      // Check if all topics are muted
       const mutedCount = await prisma.insightTopic.count({
         where: { isPaused: false, weight: { gte: 20 }, mutedUntil: { gte: new Date() } },
       });
@@ -77,12 +75,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Create or update briefing record for the target date
-    const todayDate = targetDate;
-
     const briefing = await prisma.insightBriefing.upsert({
-      where: { date: todayDate },
+      where: { date: targetDate },
       create: {
-        date: todayDate,
+        date: targetDate,
         status: 'generating',
         summary: '',
         cardCount: 0,
@@ -94,104 +90,169 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 3. Delete any existing cards and suggestions for this briefing (in case of regeneration)
-    await prisma.insightCard.deleteMany({
-      where: { briefingId: briefing.id },
+    // 4. Delete any existing cards and suggestions (in case of regeneration)
+    await prisma.insightCard.deleteMany({ where: { briefingId: briefing.id } });
+    await prisma.suggestedTopic.deleteMany({ where: { briefingId: briefing.id } });
+
+    // 5. Fire-and-forget: run the heavy research in the background
+    generateBriefingAsync(briefing.id, topics).catch((err) => {
+      console.error('[Briefing] Background generation failed:', err);
+      prisma.insightBriefing.update({
+        where: { id: briefing.id },
+        data: { status: 'error', summary: `生成失败: ${err.message || '未知错误'}` },
+      }).catch(() => {});
     });
-    await prisma.suggestedTopic.deleteMany({
-      where: { briefingId: briefing.id },
-    });
 
-    // 4. For each topic, select combos and research
-    console.log(`[Briefing] Starting research for ${topics.length} topics...`);
+    // Return immediately — frontend polls GET /api/insights/briefing?date=... for status
+    return NextResponse.json({ success: true, status: 'generating' });
+  } catch (error) {
+    console.error('[Briefing] Generation failed:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate briefing' },
+      { status: 500 }
+    );
+  }
+}
 
-    const cards: any[] = [];
+// ---------------------------------------------------------------------------
+// Background generation worker
+// ---------------------------------------------------------------------------
+const TOPIC_BATCH_SIZE = 3;
 
-    for (const topic of topics) {
-      try {
-        const combos = await selectCombosForResearch(topic.id);
+async function generateBriefingAsync(briefingId: string, topics: any[]): Promise<void> {
+  console.log(`[Briefing] Starting background research for ${topics.length} topics...`);
 
-        if (combos.length === 0) {
-          console.warn(`[Briefing] No combos available for topic "${topic.name}", skipping`);
-          continue;
-        }
+  const cards: any[] = [];
 
-        // Research each selected combo in parallel
-        const comboResults = await Promise.allSettled(
-          combos.map(combo =>
-            researchWithCombo(topic, combo, BRIEFING_MODEL)
-          )
-        );
-
-        for (const result of comboResults) {
-          if (result.status === 'fulfilled' && result.value !== null) {
-            const { analysis, comboId } = result.value;
-
-            // Skip cards that LLM marked as no-increment
-            if (analysis.title.includes('[无增量]')) {
-              console.log(`[Briefing] Skipping no-increment card for topic "${topic.name}": ${analysis.title}`);
-              continue;
-            }
-
-            const card = await prisma.insightCard.create({
-              data: {
-                briefingId: briefing.id,
-                topicId: topic.id,
-                comboId,
-                category: analysis.category,
-                priority: analysis.priority,
-                title: analysis.title,
-                summary: analysis.summary,
-                details: analysis.details,
-                impact: analysis.impact,
-                action: Array.isArray(analysis.action) ? analysis.action.join('\n') : analysis.action,
-                sources: analysis.sources,
-              },
-            });
-
-            cards.push(card);
-          }
-        }
-      } catch (error) {
-        console.error(`[Briefing] Topic "${topic.name}" failed:`, error);
+  // Process topics in parallel batches
+  for (let i = 0; i < topics.length; i += TOPIC_BATCH_SIZE) {
+    const batch = topics.slice(i, i + TOPIC_BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map(topic => researchTopic(briefingId, topic))
+    );
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        cards.push(...result.value);
       }
     }
+  }
 
-    // 5. Generate competitor intelligence card (if data available)
+  // Competitor intelligence card
+  try {
+    const compCard = await generateCompetitorCard(briefingId);
+    if (compCard) cards.push(compCard);
+  } catch (error) {
+    console.error('[Briefing] Competitor intelligence card failed:', error);
+  }
+
+  // Executive summary
+  let summary: string;
+  if (cards.length > 0) {
+    summary = await generateExecutiveSummary(cards);
+  } else {
+    summary = '今日所有话题研究均未返回有效结果。';
+  }
+
+  // Suggest new topics
+  if (cards.length > 0) {
     try {
-      const { collectCompetitorData } = await import('@/lib/insights/collector');
-      const competitorData = await collectCompetitorData();
+      const existingNames = topics.map((t: any) => t.name);
+      await suggestNewTopics(briefingId, cards, existingNames);
+    } catch (error) {
+      console.error('[Briefing] Topic suggestion failed:', error);
+    }
+  }
 
-      if (competitorData.competitors.length > 0) {
-        const competitorContext = competitorData.competitors.map(c => {
-          let text = `## ${c.name}\n`;
-          if (c.appSnapshots.length > 0) {
-            const latest = c.appSnapshots[0];
-            text += `- 评分: ${latest.rating ?? 'N/A'}, 版本: ${latest.version ?? 'N/A'}\n`;
-            if (latest.releaseNotes) text += `- 更新说明: ${latest.releaseNotes.substring(0, 200)}\n`;
-          }
-          if (c.reviewSummary.total > 0) {
-            text += `- 新评论 ${c.reviewSummary.total} 条, 平均评分 ${c.reviewSummary.avgRating ?? 'N/A'}\n`;
-            if (c.reviewSummary.topIssues.length > 0) text += `- 主要问题: ${c.reviewSummary.topIssues.join(', ')}\n`;
-          }
-          for (const wc of c.webChanges) {
-            text += `- 网站变化: ${wc.summary}\n`;
-          }
-          for (const n of c.news) {
-            text += `- 新闻: ${n.title} (${n.source})\n`;
-          }
-          return text;
-        }).join('\n');
+  // Finalize
+  await prisma.insightBriefing.update({
+    where: { id: briefingId },
+    data: { status: 'ready', cardCount: cards.length, summary },
+  });
 
-        if (competitorContext.trim()) {
-          const client = await getOpenAIClient();
+  console.log(`[Briefing] Generation complete: ${cards.length}/${topics.length} topics succeeded`);
+}
 
-          const response = await client.chat.completions.create({
-            model: BRIEFING_MODEL,
-            messages: [
-              {
-                role: 'system',
-                content: `你是一位竞品情报分析师。根据以下竞品数据，生成一份简洁的竞品动态分析。
+// Research a single topic and return created cards
+async function researchTopic(briefingId: string, topic: any): Promise<any[]> {
+  const cards: any[] = [];
+  try {
+    const combos = await selectCombosForResearch(topic.id);
+    if (combos.length === 0) {
+      console.warn(`[Briefing] No combos available for topic "${topic.name}", skipping`);
+      return cards;
+    }
+
+    const comboResults = await Promise.allSettled(
+      combos.map(combo => researchWithCombo(topic, combo, BRIEFING_MODEL))
+    );
+
+    for (const result of comboResults) {
+      if (result.status === 'fulfilled' && result.value !== null) {
+        const { analysis, comboId } = result.value;
+        if (analysis.title.includes('[无增量]')) {
+          console.log(`[Briefing] Skipping no-increment card for topic "${topic.name}": ${analysis.title}`);
+          continue;
+        }
+        const card = await prisma.insightCard.create({
+          data: {
+            briefingId,
+            topicId: topic.id,
+            comboId,
+            category: analysis.category,
+            priority: analysis.priority,
+            title: analysis.title,
+            summary: analysis.summary,
+            details: analysis.details,
+            impact: analysis.impact,
+            action: Array.isArray(analysis.action) ? analysis.action.join('\n') : analysis.action,
+            sources: analysis.sources,
+          },
+        });
+        cards.push(card);
+      }
+    }
+  } catch (error) {
+    console.error(`[Briefing] Topic "${topic.name}" failed:`, error);
+  }
+  return cards;
+}
+
+// Generate competitor intelligence card
+async function generateCompetitorCard(briefingId: string): Promise<any | null> {
+  const { collectCompetitorData } = await import('@/lib/insights/collector');
+  const competitorData = await collectCompetitorData();
+
+  if (competitorData.competitors.length === 0) return null;
+
+  const competitorContext = competitorData.competitors.map(c => {
+    let text = `## ${c.name}\n`;
+    if (c.appSnapshots.length > 0) {
+      const latest = c.appSnapshots[0];
+      text += `- 评分: ${latest.rating ?? 'N/A'}, 版本: ${latest.version ?? 'N/A'}\n`;
+      if (latest.releaseNotes) text += `- 更新说明: ${latest.releaseNotes.substring(0, 200)}\n`;
+    }
+    if (c.reviewSummary.total > 0) {
+      text += `- 新评论 ${c.reviewSummary.total} 条, 平均评分 ${c.reviewSummary.avgRating ?? 'N/A'}\n`;
+      if (c.reviewSummary.topIssues.length > 0) text += `- 主要问题: ${c.reviewSummary.topIssues.join(', ')}\n`;
+    }
+    for (const wc of c.webChanges) {
+      text += `- 网站变化: ${wc.summary}\n`;
+    }
+    for (const n of c.news) {
+      text += `- 新闻: ${n.title} (${n.source})\n`;
+    }
+    return text;
+  }).join('\n');
+
+  if (!competitorContext.trim()) return null;
+
+  const client = await getOpenAIClient();
+  const response = await client.chat.completions.create({
+    model: BRIEFING_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: `你是一位竞品情报分析师。根据以下竞品数据，生成一份简洁的竞品动态分析。
 输出严格 JSON 格式：
 {
   "title": "一句话标题，有信息量",
@@ -200,87 +261,36 @@ export async function POST(request: NextRequest) {
   "impact": "对我们的影响（一句话）或 null",
   "action": "建议行动 或 null"
 }`,
-              },
-              {
-                role: 'user',
-                content: `以下是过去 24 小时的竞品动态数据：\n\n${competitorContext}\n\n请分析并生成竞品情报卡片。`,
-              },
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.4,
-            max_completion_tokens: 2000,
-          });
-
-          const content = response.choices[0]?.message?.content;
-          if (content) {
-            const parsed = JSON.parse(content);
-            const card = await prisma.insightCard.create({
-              data: {
-                briefingId: briefing.id,
-                category: 'competitor',
-                priority: competitorData.alerts.length > 0 ? 'high' : 'medium',
-                title: parsed.title || '竞品动态',
-                summary: parsed.summary || '',
-                details: parsed.details || '',
-                impact: parsed.impact || null,
-                action: parsed.action || null,
-                sources: [],
-              },
-            });
-            cards.push(card);
-            console.log('[Briefing] Competitor intelligence card created');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[Briefing] Competitor intelligence card failed:', error);
-      // Non-critical — continue with briefing even if competitor card fails
-    }
-
-    // 6. Generate executive summary using LLM
-    let summary: string;
-    if (cards.length > 0) {
-      summary = await generateExecutiveSummary(cards);
-    } else {
-      summary = '今日所有话题研究均未返回有效结果。';
-    }
-
-    // 7. Suggest new topics based on card content
-    if (cards.length > 0) {
-      try {
-        const existingNames = topics.map(t => t.name);
-        await suggestNewTopics(briefing.id, cards, existingNames);
-      } catch (error) {
-        console.error('[Briefing] Topic suggestion failed:', error);
-      }
-    }
-
-    // 8. Update briefing with final status
-    const updatedBriefing = await prisma.insightBriefing.update({
-      where: { id: briefing.id },
-      data: {
-        status: 'ready',
-        cardCount: cards.length,
-        summary,
       },
-    });
+      {
+        role: 'user',
+        content: `以下是过去 24 小时的竞品动态数据：\n\n${competitorContext}\n\n请分析并生成竞品情报卡片。`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.4,
+    max_completion_tokens: 2000,
+  });
 
-    console.log(
-      `[Briefing] Generation complete: ${cards.length}/${topics.length} topics succeeded`
-    );
+  const content = response.choices[0]?.message?.content;
+  if (!content) return null;
 
-    return NextResponse.json({
-      success: true,
-      briefing: updatedBriefing,
-      cards,
-    });
-  } catch (error) {
-    console.error('[Briefing] Generation failed:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate briefing' },
-      { status: 500 }
-    );
-  }
+  const parsed = JSON.parse(content);
+  const card = await prisma.insightCard.create({
+    data: {
+      briefingId,
+      category: 'competitor',
+      priority: competitorData.alerts.length > 0 ? 'high' : 'medium',
+      title: parsed.title || '竞品动态',
+      summary: parsed.summary || '',
+      details: parsed.details || '',
+      impact: parsed.impact || null,
+      action: parsed.action || null,
+      sources: [],
+    },
+  });
+  console.log('[Briefing] Competitor intelligence card created');
+  return card;
 }
 
 /**

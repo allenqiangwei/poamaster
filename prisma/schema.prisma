@@ -385,6 +385,7 @@ model FeishuMessage {
   @@index([chatId])
   @@index([timestamp])
   @@index([senderId])
+  @@index([chatId, timestamp])
 }
 
 model ChatSignal {

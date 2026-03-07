@@ -3,29 +3,26 @@ import { prisma } from '@/lib/prisma';
 import { verifySession } from '@/lib/auth';
 
 /**
- * GET /api/feishu/chats/[chatId]/messages
- * Fetch messages for a specific chat with optional time range, sender filter, and analysis data.
+ * GET /api/feishu/messages
+ * Cross-chat message query with time range, sender, and type filters.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
-) {
+export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('session')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const session = await verifySession(token);
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
 
-    const { chatId } = await params;
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
     const startTime = searchParams.get('startTime');
     const endTime = searchParams.get('endTime');
+    const chatIds = searchParams.get('chatIds');
     const senderIds = searchParams.get('senderIds');
-    const includeAnalysis = searchParams.get('includeAnalysis') === 'true';
+    const msgType = searchParams.get('msgType');
 
-    const where: any = { chatId };
+    const where: any = {};
 
     if (startTime) {
       const d = new Date(startTime);
@@ -35,63 +32,52 @@ export async function GET(
       const d = new Date(endTime);
       if (!isNaN(d.getTime())) where.timestamp = { ...where.timestamp, lte: d };
     }
+    if (chatIds) {
+      const ids = chatIds.split(',').filter(Boolean);
+      if (ids.length > 0) where.chatId = { in: ids };
+    }
     if (senderIds) {
       const ids = senderIds.split(',').filter(Boolean);
       if (ids.length > 0) where.senderId = { in: ids };
     }
+    if (msgType) {
+      where.msgType = msgType;
+    }
 
-    const queries: Promise<any>[] = [
+    const [messages, total] = await Promise.all([
       prisma.feishuMessage.findMany({
         where,
         orderBy: { timestamp: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        select: {
+          id: true,
+          messageId: true,
+          chatId: true,
+          senderId: true,
+          senderName: true,
+          content: true,
+          msgType: true,
+          timestamp: true,
+          chat: { select: { name: true, chatType: true } },
+        },
       }),
       prisma.feishuMessage.count({ where }),
-    ];
+    ]);
 
-    // Optional analysis data
-    if (includeAnalysis) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      queries.push(
-        prisma.chatDigest.findFirst({
-          where: { chatId, date: { gte: today } },
-          orderBy: { date: 'desc' },
-        }),
-        prisma.chatSignal.findMany({
-          where: { chatId, isResolved: false },
-          orderBy: { detectedAt: 'desc' },
-          take: 10,
-        }),
-        prisma.teamPulse.findFirst({
-          where: { chatId },
-          orderBy: { date: 'desc' },
-        }),
-      );
-    }
-
-    const results = await Promise.all(queries);
-    const [messages, total] = results;
-
-    const response: any = {
+    return NextResponse.json({
       success: true,
-      messages,
+      messages: messages.map((m) => ({
+        ...m,
+        chatName: m.chat?.name || null,
+        chatType: m.chat?.chatType || null,
+        chat: undefined,
+      })),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-    };
-
-    if (includeAnalysis) {
-      response.analysis = {
-        digest: results[2] || null,
-        signals: results[3] || [],
-        pulse: results[4] || null,
-      };
-    }
-
-    return NextResponse.json(response);
+    });
   } catch (error) {
     console.error('[Feishu] Failed to fetch messages:', error);
     return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });
